@@ -1,0 +1,5 @@
+opencv-python>=4.8
+numpy>=1.24
+scikit-image>=0.21
+pygame>=2.5
+albumentations>=1.4
