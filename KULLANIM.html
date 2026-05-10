@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOTİFİKA — Tam Kullanım Akışı</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #d8dbe2;
+    --paper: #ffffff;
+    --ink: #1f2937;
+    --ink-soft: #4b5563;
+    --rule: #e5e7eb;
+    --accent: #4338ca;
+    --accent-soft: #eef2ff;
+    --warn: #b45309;
+    --warn-soft: #fef3c7;
+    --ok: #065f46;
+    --ok-soft: #d1fae5;
+    --info: #075985;
+    --info-soft: #e0f2fe;
+    --term-bg: #1e1e2e;
+    --term-fg: #cdd6f4;
+    --term-comment: #7f849c;
+    --term-keyword: #cba6f7;
+    --term-string: #a6e3a1;
+    --term-func: #89b4fa;
+    --term-num: #fab387;
+    --term-prompt: #74c7ec;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    line-height: 1.65;
+    padding: 30px 15px 60px;
+  }
+
+  .doc { max-width: 880px; margin: 0 auto; }
+
+  .page {
+    background: var(--paper);
+    margin: 0 auto 32px;
+    padding: 60px 70px 80px;
+    box-shadow: 0 6px 24px rgba(15, 23, 42, 0.18);
+    border-radius: 2px;
+    position: relative;
+    min-height: 1180px;
+  }
+
+  .page-number {
+    position: absolute;
+    bottom: 28px;
+    right: 70px;
+    font-size: 12px;
+    color: #9ca3af;
+    letter-spacing: 1px;
+  }
+
+  .page-tag {
+    position: absolute;
+    bottom: 28px;
+    left: 70px;
+    font-size: 12px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  h1 {
+    font-size: 36px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+  }
+
+  h2 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 36px 0 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--rule);
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 24px 0 8px;
+  }
+
+  h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 18px 0 6px;
+  }
+
+  .subtitle {
+    color: var(--ink-soft);
+    font-size: 17px;
+    margin: 4px 0 30px;
+  }
+
+  p { margin: 10px 0; }
+
+  .lede {
+    font-size: 16px;
+    color: var(--ink-soft);
+    margin-bottom: 20px;
+  }
+
+  ul, ol { margin: 10px 0 10px 24px; }
+  li { margin: 4px 0; }
+
+  /* User action box */
+  .action {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    margin: 22px 0 10px;
+    border-radius: 4px;
+  }
+  .action .who {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .action .what { font-size: 16px; font-weight: 600; }
+
+  /* Code arrow */
+  .pipe {
+    text-align: center;
+    color: #cbd5e1;
+    font-size: 28px;
+    line-height: 1;
+    margin: 4px 0;
+    font-weight: 300;
+  }
+
+  /* Terminal-like code block */
+  .term {
+    background: var(--term-bg);
+    color: var(--term-fg);
+    font-family: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    padding: 38px 22px 18px;
+    border-radius: 8px;
+    margin: 12px 0 18px;
+    overflow-x: auto;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+  }
+  .term::before {
+    content: "";
+    position: absolute;
+    top: 14px;
+    left: 16px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #f87171;
+    box-shadow: 18px 0 0 #fbbf24, 36px 0 0 #4ade80;
+  }
+  .term .label {
+    position: absolute;
+    top: 12px; right: 18px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #6b7280;
+    text-transform: uppercase;
+  }
+  .term .c { color: var(--term-comment); font-style: italic; }
+  .term .k { color: var(--term-keyword); }
+  .term .s { color: var(--term-string); }
+  .term .f { color: var(--term-func); }
+  .term .n { color: var(--term-num); }
+  .term .p { color: var(--term-prompt); }
+  .term .var { color: #f5e0dc; }
+
+  /* File / line tag */
+  .tag {
+    display: inline-block;
+    background: #f3f4f6;
+    color: #374151;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid #e5e7eb;
+  }
+  .tag a { color: inherit; text-decoration: none; }
+  .tag:hover { background: #e5e7eb; }
+
+  /* Result block */
+  .result {
+    background: #f9fafb;
+    border: 1px solid var(--rule);
+    border-left: 4px solid #6366f1;
+    padding: 12px 16px;
+    margin: 10px 0 18px;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  .result .head {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  /* Inline code */
+  code {
+    background: #f3f4f6;
+    color: #be123c;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    background: #f9fafb;
+    font-weight: 700;
+    color: #374151;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  tr:hover td { background: #fafbfc; }
+
+  /* Boxes */
+  .info, .warn, .ok {
+    padding: 14px 18px;
+    margin: 16px 0;
+    border-radius: 4px;
+    font-size: 14px;
+    border-left: 4px solid;
+  }
+  .info { background: var(--info-soft); border-color: var(--info); color: #0c4a6e; }
+  .warn { background: var(--warn-soft); border-color: var(--warn); color: #78350f; }
+  .ok { background: var(--ok-soft); border-color: var(--ok); color: #064e3b; }
+  .info strong, .warn strong, .ok strong { font-weight: 700; }
+
+  /* TOC */
+  .toc {
+    background: #fafbfc;
+    border: 1px solid var(--rule);
+    padding: 22px 30px;
+    border-radius: 6px;
+    margin: 16px 0;
+  }
+  .toc ol { list-style: none; counter-reset: tocitem; margin: 0; }
+  .toc li {
+    counter-increment: tocitem;
+    padding: 8px 0;
+    border-bottom: 1px dashed #e5e7eb;
+    position: relative;
+    padding-left: 38px;
+  }
+  .toc li:last-child { border-bottom: none; }
+  .toc li::before {
+    content: counter(tocitem, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .toc a { color: var(--ink); text-decoration: none; font-weight: 500; }
+  .toc a:hover { color: var(--accent); }
+
+  /* Cover */
+  .cover {
+    text-align: center;
+    padding: 110px 70px 80px;
+  }
+  .cover h1 {
+    font-size: 64px;
+    letter-spacing: -2px;
+  }
+  .cover .subtitle {
+    font-size: 19px;
+    margin-top: 8px;
+    color: var(--ink-soft);
+  }
+  .cover .meta {
+    margin-top: 60px;
+    font-size: 13px;
+    color: #9ca3af;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .cover-art {
+    margin: 50px auto;
+    width: 120px; height: 120px;
+    border: 6px solid #1f2937;
+    background: repeating-linear-gradient(
+      45deg,
+      #4338ca 0 14px,
+      #1f2937 14px 28px,
+      #be123c 28px 42px,
+      #1f2937 42px 56px
+    );
+    border-radius: 4px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+  }
+
+  /* Key bindings */
+  .keys { display: grid; grid-template-columns: 110px 1fr; gap: 10px 18px; margin: 14px 0; align-items: center; }
+  .key {
+    font-family: "JetBrains Mono", monospace;
+    background: #1f2937;
+    color: #f5e0dc;
+    padding: 6px 12px;
+    border-radius: 5px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 13px;
+    box-shadow: 0 2px 0 #0f172a;
+  }
+
+  /* Diagram */
+  .diagram {
+    background: #fafbfc;
+    border: 1px solid var(--rule);
+    padding: 22px;
+    border-radius: 6px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    white-space: pre;
+    overflow-x: auto;
+    line-height: 1.6;
+    color: #374151;
+  }
+
+  /* Print */
+  @media print {
+    body { background: white; padding: 0; }
+    .page {
+      box-shadow: none;
+      margin: 0;
+      page-break-after: always;
+      border-radius: 0;
+    }
+  }
+
+  /* Mobile */
+  @media (max-width: 700px) {
+    .page { padding: 40px 28px 70px; min-height: auto; }
+    .cover { padding: 60px 28px; }
+    .cover h1 { font-size: 42px; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 22px; }
+    .keys { grid-template-columns: 90px 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<!-- ============================================================ -->
+<!-- PAGE 1 — COVER -->
+<!-- ============================================================ -->
+<div class="page cover">
+  <h1>MOTİFİKA</h1>
+  <p class="subtitle">Kullanıcı Eylemi &rarr; Kod Tepkisi<br>Tam Akış Rehberi</p>
+  <div class="cover-art"></div>
+  <p class="meta">Pi 5 &middot; OpenCV &middot; AR Overlay</p>
+  <p class="meta" style="margin-top: 8px;">Türkçe kod yorumlu eğitsel proje</p>
+  <span class="page-number">— 01 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 2 — TOC -->
+<!-- ============================================================ -->
+<div class="page">
+  <h1>İçindekiler</h1>
+  <p class="lede">Bu belge baştan sona okunmalıdır. Her sayfa bir önceki sayfanın bıraktığı noktadan devam eder. Solda kullanıcı eylemi, ardından arka planda çalışan kod ve sonuç gösterilir.</p>
+
+  <div class="toc">
+    <ol>
+      <li><a href="#s1">Uygulamanın Açılışı &mdash; terminale komut yazılır</a></li>
+      <li><a href="#s2">Argümanların Parse Edilmesi</a></li>
+      <li><a href="#s3">Chart Hazırlığı &mdash; motif görseli ızgaraya iner</a></li>
+      <li><a href="#s4">Kameranın Açılışı</a></li>
+      <li><a href="#s5">Kalibrasyon &mdash; kullanıcı 4 köşeye tıklar</a></li>
+      <li><a href="#s6">4. Tıklamadan Sonra &mdash; Homography hesabı</a></li>
+      <li><a href="#s7">Çalışan Nesnelerin Kurulumu</a></li>
+      <li><a href="#s8">Ana Döngü &mdash; her karede arka planda</a></li>
+      <li><a href="#s9">Kullanıcı Dokurken &mdash; canlı tespit</a></li>
+      <li><a href="#s10">Renk Kontrolü &mdash; her 5 karede bir</a></li>
+      <li><a href="#s11">Tuş Tepkileri &mdash; her tuşun kod yolu</a></li>
+      <li><a href="#s12">Çıkış &mdash; kaynaklar serbest bırakılır</a></li>
+    </ol>
+  </div>
+
+  <h2>Üç Uzay, Üç Matris</h2>
+  <p>Belge boyunca sürekli karşına çıkacak. Hafızana yerleştir.</p>
+
+  <div class="diagram">
++-------------------+        +---------------------+        +-----------------+
+|  CHART-BİRİM      |  H_c2c |   CHART-PİKSEL      |  H_*   |  KAMERA-PİKSEL  |
+|  (0..cols, ...)   |&lt;------&gt;|  (cols*16, rows*16) |&lt;------&gt;|  (1280, 720)    |
++-------------------+        +---------------------+        +-----------------+
+       chart.json                    bellek                      cv2.VideoCapture
+  </div>
+
+  <span class="page-tag">Bölüm 0</span>
+  <span class="page-number">— 02 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 3 — Açılış -->
+<!-- ============================================================ -->
+<div class="page" id="s1">
+  <h1>1. Uygulamanın Açılışı</h1>
+  <p class="lede">Kullanıcı kabuk açar ve uygulamayı başlatır. Bu noktada hiçbir kamera, hiçbir pencere yok. Sadece bir Python süreci doğacak.</p>
+
+  <div class="action">
+    <div class="who">Kullanıcı</div>
+    <div class="what">Terminale komutu yazıp Enter'a bastı.</div>
+  </div>
+
+  <div class="term">
+    <span class="label">terminal</span>
+<span class="p">$</span> python -m app.main <span class="k">--motif</span> eli_belinde \
+    <span class="k">--rows</span> <span class="n">30</span> <span class="k">--cols</span> <span class="n">60</span> <span class="k">--camera</span> <span class="n">0</span>
+  </div>
+
+  <div class="pipe">&darr;</div>
+
+  <h3>Python ne yapıyor?</h3>
+  <p><code>-m app.main</code> Python'a "<strong>app paketinin main modülünü</strong> bul ve çalıştır" der. Yorumlayıcı dosyayı baştan sona import eder; en altta şu satırı görür:</p>
+
+  <div class="term">
+    <span class="label">app/main.py · 263-264</span>
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    <span class="f">main</span>()
+  </div>
+
+  <p><code>__name__</code> değişkeni doğrudan çalıştırılan modülde <code>"__main__"</code> olur, import edilirse modülün adı olur. Bu sayede <code>main()</code> sadece doğrudan çalıştırmada tetiklenir.</p>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    <code>main()</code> fonksiyonu çağrıldı. Hiçbir argüman parse edilmedi henüz, hiçbir pencere açılmadı. Sadece bir Python yürütme bağlamı oluştu.
+  </div>
+
+  <h3>Hangi modüller import edildi?</h3>
+  <p>Python <code>main.py</code>'i okurken üst kısımdaki tüm <code>import</code>ları çözer:</p>
+
+  <div class="term">
+    <span class="label">app/main.py · 16-39</span>
+<span class="k">import</span> argparse, json, time
+<span class="k">from</span> pathlib <span class="k">import</span> Path
+<span class="k">import</span> cv2
+<span class="k">import</span> numpy <span class="k">as</span> np
+
+<span class="k">from</span> app.calibration <span class="k">import</span> ...
+<span class="k">from</span> app.color_check <span class="k">import</span> HSVBackend, check_active_row, ...
+<span class="k">from</span> app.overlay     <span class="k">import</span> Chart, OverlayRenderer
+<span class="k">from</span> app.pattern     <span class="k">import</span> build_chart, save_chart
+<span class="k">from</span> app.progress    <span class="k">import</span> ProgressTracker
+<span class="k">from</span> app.ui          <span class="k">import</span> UIRenderer
+  </div>
+
+  <p>Bu satırlarda her bir alt modül de yüklenir; OpenCV C++ kütüphanesi belleğe alınır, NumPy başlatılır. Tüm sınıflar (<code>Chart</code>, <code>OverlayRenderer</code>, <code>ProgressTracker</code>...) <strong>tanımlanır ama henüz oluşturulmaz</strong>.</p>
+
+  <span class="page-tag">Bölüm 1 · Açılış</span>
+  <span class="page-number">— 03 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 4 — Argüman -->
+<!-- ============================================================ -->
+<div class="page" id="s2">
+  <h1>2. Argümanların Parse Edilmesi</h1>
+  <p class="lede">Kabuktaki kelimeler Python sözlüğüne dönüşür. Hatalı argüman varsa program burada ölür.</p>
+
+  <h3>Kod ne yapıyor?</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 105-122 (özet)</span>
+<span class="var">ap</span> = argparse.ArgumentParser()
+ap.add_argument(<span class="s">"--motif"</span>,  choices=[<span class="s">"eli_belinde"</span>, <span class="s">"hayat_agaci"</span>])
+ap.add_argument(<span class="s">"--rows"</span>,   type=<span class="f">int</span>, required=<span class="k">True</span>)
+ap.add_argument(<span class="s">"--cols"</span>,   type=<span class="f">int</span>, required=<span class="k">True</span>)
+ap.add_argument(<span class="s">"--palette"</span>, type=<span class="f">int</span>, default=<span class="n">4</span>)
+ap.add_argument(<span class="s">"--direction"</span>, choices=[<span class="s">"bottom_up"</span>, <span class="s">"top_down"</span>])
+ap.add_argument(<span class="s">"--camera"</span>, type=<span class="f">int</span>, default=<span class="n">0</span>)
+ap.add_argument(<span class="s">"--image"</span>,  type=Path, default=<span class="k">None</span>)
+ap.add_argument(<span class="s">"--recalibrate"</span>,    action=<span class="s">"store_true"</span>)
+ap.add_argument(<span class="s">"--no-color-check"</span>, action=<span class="s">"store_true"</span>)
+<span class="var">args</span> = ap.parse_args()
+  </div>
+
+  <p><code>parse_args()</code> komut satırındaki kelimeleri tek tek alıp doğru tipe çevirir, eksik <code>required</code> alanı varsa <strong>kullanıcı dostu hata</strong> yazıp programı sonlandırır.</p>
+
+  <div class="result">
+    <div class="head">Sonuç (örnek args nesnesi)</div>
+    <code>args.motif='eli_belinde', args.rows=30, args.cols=60, args.camera=0, args.recalibrate=False, args.no_color_check=False, args.image=None</code>
+  </div>
+
+  <h2>Yan Etkiler</h2>
+
+  <table>
+    <tr><th style="width:35%">Argüman</th><th>Eksikse / Hatalıysa</th></tr>
+    <tr><td><code>--rows</code> / <code>--cols</code></td><td>argparse hata yazar, program ölür.</td></tr>
+    <tr><td><code>--motif xyz</code> (listede yok)</td><td>argparse <em>"invalid choice"</em> der, program ölür.</td></tr>
+    <tr><td><code>--camera abc</code> (int değil)</td><td>argparse <em>"invalid int value"</em> der.</td></tr>
+    <tr><td><code>--no-color-check</code></td><td><code>args.no_color_check = True</code> (tire altçizgiye dönüşür).</td></tr>
+  </table>
+
+  <div class="info">
+    <strong>Not:</strong> argparse argümanları parse ettikten <em>sonra</em> hâlâ Python süreci yaşıyor. Henüz hiçbir dosya açılmadı, hiçbir kamera yakalanmadı. Bütün hazırlık parçaları sıralı çağrılacak.
+  </div>
+
+  <span class="page-tag">Bölüm 2 · Argümanlar</span>
+  <span class="page-number">— 04 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 5 — Chart hazırlığı -->
+<!-- ============================================================ -->
+<div class="page" id="s3">
+  <h1>3. Chart Hazırlığı</h1>
+  <p class="lede">Motif görseli ilk kez kullanılıyorsa, küçük bir ızgaraya inip 4 renge sıkıştırılır. JSON'a kaydedilir. Sonraki çalıştırmalarda bu adım atlanır.</p>
+
+  <div class="action">
+    <div class="who">Kullanıcı</div>
+    <div class="what">Hiçbir şey yapmadı. Otomatik tetiklendi.</div>
+  </div>
+
+  <div class="term">
+    <span class="label">app/main.py · 124-126</span>
+<span class="var">chart_path</span> = <span class="f">ensure_chart</span>(args.motif, args.rows, args.cols, args.palette)
+<span class="var">chart</span> = Chart.<span class="f">load</span>(chart_path)
+<span class="f">print</span>(<span class="s">f"chart yüklendi: {chart_path}"</span>)
+  </div>
+
+  <h3>ensure_chart fonksiyonu</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 54-66</span>
+<span class="k">def</span> <span class="f">ensure_chart</span>(motif, rows, cols, palette):
+    chart_path = Path(<span class="s">"assets"</span>) / <span class="s">f"{motif}_chart.json"</span>
+    <span class="k">if not</span> chart_path.<span class="f">exists</span>():
+        src = MOTIFS[motif]                  <span class="c"># eli_belinde.jpg vs.</span>
+        chart = <span class="f">build_chart</span>(src, rows, cols, palette)
+        <span class="f">save_chart</span>(chart, chart_path)
+    <span class="k">return</span> chart_path
+  </div>
+
+  <h3>build_chart &mdash; üç adımlı boru hattı</h3>
+
+  <div class="term">
+    <span class="label">app/pattern.py · 491-538</span>
+raw   = cv2.<span class="f">imread</span>(image_path, IMREAD_UNCHANGED)
+bgr   = <span class="f">flatten_alpha</span>(raw)             <span class="c"># PNG saydamlığı &rarr; beyaz</span>
+small = <span class="f">pixelate</span>(bgr, rows, cols)      <span class="c"># 800x800 &rarr; 30x60</span>
+palette_rgb, grid = <span class="f">quantize_palette</span>(small, palette_size)
+                                          <span class="c"># k-means ile 4 renk</span>
+  </div>
+
+  <h2>Görsel Karelere Bölünüyor</h2>
+
+  <div class="result">
+    <div class="head">pixelate (pattern.py · 262-288)</div>
+    <code>cv2.resize(img, (cols, rows), interpolation=cv2.INTER_AREA)</code><br>
+    Tek satır. <strong>INTER_AREA</strong> alan ortalaması yapar &mdash; her hedef piksel = kaynaktaki ona denk düşen alanın ortalama rengi. Bu yüzden her hücrenin "ortalama rengi" çıkar.
+  </div>
+
+  <h3>quantize_palette &mdash; k-means</h3>
+
+  <div class="term">
+    <span class="label">app/pattern.py · 310-409</span>
+pixels = small.<span class="f">reshape</span>(-<span class="n">1</span>, <span class="n">3</span>).<span class="f">astype</span>(np.float32)   <span class="c"># 1800 x 3</span>
+criteria = (TERM_EPS + TERM_MAX_ITER, <span class="n">20</span>, <span class="n">0.5</span>)
+_, labels, centers = cv2.<span class="f">kmeans</span>(
+    pixels, k=<span class="n">4</span>, None, criteria,
+    attempts=<span class="n">5</span>, flags=KMEANS_PP_CENTERS,
+)
+  </div>
+
+  <p>K-means rastgele 4 merkez seçer, her pikseli en yakın merkeze atar, merkezleri yeniden hesaplar; merkezler değişmeyene veya 20 iterasyonu aşana dek tekrarlar. <code>attempts=5</code> ile 5 farklı başlangıç denenip en iyisi seçilir.</p>
+
+  <div class="result">
+    <div class="head">Diskte oluşan dosyalar</div>
+    <code>assets/eli_belinde_chart.json</code> &mdash; <code>{rows, cols, palette: [[r,g,b],...], grid: [[idx,...],...]}</code><br>
+    <code>assets/eli_belinde_chart.preview.png</code> &mdash; her hücreyi 16x16 büyüten gözle bakılabilir önizleme
+  </div>
+
+  <span class="page-tag">Bölüm 3 · Chart</span>
+  <span class="page-number">— 05 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 6 — Kamera açılışı -->
+<!-- ============================================================ -->
+<div class="page" id="s4">
+  <h1>4. Kameranın Açılışı</h1>
+  <p class="lede">Hâlâ hiçbir pencere yok. Şimdi USB ya da CSI kameraya gerçek anlamda bağlanılıyor. Kamera başka uygulama tarafından tutuluyorsa burada ölünür.</p>
+
+  <div class="term">
+    <span class="label">app/main.py · 128</span>
+provider, cap, frame_size = <span class="f">open_camera_or_image</span>(args)
+  </div>
+
+  <h3>open_camera_or_image &mdash; açılışın iç yüzü</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 69-93</span>
+<span class="k">if</span> args.image:                              <span class="c"># test modu</span>
+    img = cv2.<span class="f">imread</span>(args.image)
+    <span class="k">return</span> (<span class="k">lambda</span>: img.<span class="f">copy</span>()), <span class="k">None</span>, (W, H)
+
+<span class="var">cap</span> = cv2.<span class="f">VideoCapture</span>(args.camera)        <span class="c"># /dev/video0</span>
+<span class="k">if not</span> cap.<span class="f">isOpened</span>():
+    <span class="k">raise</span> <span class="f">RuntimeError</span>(<span class="s">"kamera açılamadı"</span>)
+
+cap.<span class="f">set</span>(CAP_PROP_FRAME_WIDTH,  <span class="n">1280</span>)
+cap.<span class="f">set</span>(CAP_PROP_FRAME_HEIGHT, <span class="n">720</span>)
+
+<span class="k">def</span> <span class="f">provider</span>():
+    ok, frame = cap.<span class="f">read</span>()
+    <span class="k">return</span> frame <span class="k">if</span> ok <span class="k">else</span> <span class="k">None</span>
+
+real_w = <span class="f">int</span>(cap.<span class="f">get</span>(CAP_PROP_FRAME_WIDTH))   <span class="c"># gerçek değeri sor</span>
+real_h = <span class="f">int</span>(cap.<span class="f">get</span>(CAP_PROP_FRAME_HEIGHT))
+<span class="k">return</span> provider, cap, (real_w, real_h)
+  </div>
+
+  <h3>Kamera nasıl açılıyor &mdash; zincir</h3>
+
+  <div class="diagram">
+cv2.VideoCapture(0)
+        |
+        v
+   V4L2 sürücüsü   (Linux Video for Linux 2)
+        |
+        v
+   /dev/video0     (kernel aygıt düğümü)
+        |
+        v
+   USB webcam  ya da  Pi CSI kamera
+  </div>
+
+  <div class="warn">
+    <strong>Hata olabilecek noktalar:</strong>
+    <ul>
+      <li><code>/dev/video0</code> yok &mdash; aygıt takılı değil ya da yanlış indeks</li>
+      <li>Kullanıcı <code>video</code> grubunda değil &mdash; izin reddedildi</li>
+      <li>Başka uygulama (örn. Cheese) kamerayı tutuyor &mdash; <code>cap.isOpened()</code> False</li>
+    </ul>
+  </div>
+
+  <div class="info">
+    <strong>İncelik:</strong> <code>cap.set(WIDTH, 1280)</code> kameraya rica gönderir; kamera desteklemiyorsa <em>sessizce</em> en yakını verir. Bu yüzden hemen sonrası <code>cap.get(...)</code> ile <strong>gerçek</strong> boyut geri okunur. Kalibrasyon homography'si bu boyuta bağlı; yanlış sayı kullanılırsa eşleşme bozulur.
+  </div>
+
+  <h3>provider nedir, ne işe yarar?</h3>
+  <p><code>provider</code> bir kapanış (closure) &mdash; her çağrıldığında bir BGR kare döndürür. Diğer modüller kameranın gerçek olup olmadığını bilmek zorunda değil; <code>provider()</code> arabirimine bakar.</p>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    Kamera açıldı, çözünürlük ayarlandı, <code>provider</code> hazır. Hâlâ hiçbir pencere yok &mdash; ekrana gösterim daha sonra.
+  </div>
+
+  <span class="page-tag">Bölüm 4 · Kamera</span>
+  <span class="page-number">— 06 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 7 — Kalibrasyon başlıyor -->
+<!-- ============================================================ -->
+<div class="page" id="s5">
+  <h1>5. Kalibrasyon &mdash; Kullanıcı 4 Köşeye Tıklar</h1>
+  <p class="lede">İlk açılışta veya boyut değiştiğinde kalibrasyon penceresi otomatik açılır. Kullanıcı kilimin köşelerini gösterir.</p>
+
+  <h3>Önce: kalibrasyon zaten var mı?</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 130-139</span>
+cal_data = <span class="f">load_calibration</span>(CAL_PATH)        <span class="c"># json oku</span>
+cal_match = (
+    cal_data <span class="k">is not</span> <span class="k">None</span>
+    <span class="k">and</span> cal_data[<span class="s">"rows"</span>] == args.rows
+    <span class="k">and</span> cal_data[<span class="s">"cols"</span>] == args.cols
+    <span class="k">and</span> <span class="f">tuple</span>(cal_data[<span class="s">"frame_size"</span>]) == frame_size
+)
+
+<span class="k">if</span> args.recalibrate <span class="k">or not</span> cal_match:
+    cal_data = <span class="f">run_calibration_flow</span>(provider, ...)
+  </div>
+
+  <p>Üç şart birden eşleşmiyorsa veya <code>--recalibrate</code> verildiyse kalibrasyon penceresi açılır.</p>
+
+  <div class="action">
+    <div class="who">Kullanıcı</div>
+    <div class="what">Ekranda canlı kamera akışı belirdi. Üst sol köşede kırmızı talimat: <em>"Tikla: SOL UST (1/4)"</em>.</div>
+  </div>
+
+  <h3>Pencere açılışı</h3>
+
+  <div class="term">
+    <span class="label">app/calibration.py · 188-192</span>
+cv2.<span class="f">namedWindow</span>(<span class="s">"MOTIFIKA - Kalibrasyon"</span>, WINDOW_NORMAL)
+cv2.<span class="f">setMouseCallback</span>(win, on_mouse)
+  </div>
+
+  <p>OpenCV pencereyi açar, mouse olaylarını <code>on_mouse</code> fonksiyonuna yönlendirir. Pencere boyutlandırılabilir.</p>
+
+  <h2>Sonsuz Döngü &mdash; her karede</h2>
+
+  <div class="term">
+    <span class="label">app/calibration.py · 199-320 (özet)</span>
+<span class="k">while</span> <span class="k">True</span>:
+    frame = state[<span class="s">"frozen"</span>] <span class="k">or</span> <span class="f">provider</span>()    <span class="c"># canlı veya donmuş</span>
+
+    <span class="c"># tıklanan noktaları sarı dolu daire ile çiz</span>
+    <span class="k">for</span> i, p <span class="k">in</span> <span class="f">enumerate</span>(state[<span class="s">"points"</span>]):
+        cv2.<span class="f">circle</span>(frame, p, <span class="n">8</span>, (<span class="n">0</span>, <span class="n">255</span>, <span class="n">255</span>), -<span class="n">1</span>)
+        cv2.<span class="f">putText</span>(frame, <span class="f">str</span>(i + <span class="n">1</span>), ...)
+
+    <span class="c"># 2+ noktada yeşil polygon</span>
+    <span class="k">if</span> <span class="f">len</span>(state[<span class="s">"points"</span>]) &gt;= <span class="n">2</span>:
+        cv2.<span class="f">polylines</span>(frame, ..., color=(<span class="n">0</span>, <span class="n">255</span>, <span class="n">0</span>))
+
+    cv2.<span class="f">putText</span>(frame, <span class="s">"Tikla: SOL UST (1/4)"</span>, ...)
+    cv2.<span class="f">imshow</span>(win, frame)
+    key = cv2.<span class="f">waitKey</span>(<span class="n">20</span>) &amp; <span class="n">0xFF</span>
+  </div>
+
+  <p>Bu döngü saniyede ~50 kez döner (<code>waitKey(20)</code>). Her iterasyonda kareyi yeniden çizer; daha önce tıklanan noktalar tekrar çizildiği için "yapışık" görünür.</p>
+
+  <span class="page-tag">Bölüm 5 · Kalibrasyon</span>
+  <span class="page-number">— 07 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 8 — Tıklamalar -->
+<!-- ============================================================ -->
+<div class="page">
+  <h1>5b. Tıklama Olayları</h1>
+  <p class="lede">Kullanıcı sırayla 4 köşeye tıklar. Her tıklama bir mouse callback'i tetikler.</p>
+
+  <div class="action">
+    <div class="who">Kullanıcı</div>
+    <div class="what">Kilimin sol üst köşesine sol tık yaptı.</div>
+  </div>
+
+  <div class="pipe">&darr;</div>
+
+  <div class="term">
+    <span class="label">OpenCV iç akış</span>
+<span class="c"># Pencere mouse olayını yakalar</span>
+<span class="c"># Kayıtlı callback fonksiyonunu çağırır</span>
+<span class="f">on_mouse</span>(event=EVENT_LBUTTONDOWN, x=<span class="n">412</span>, y=<span class="n">128</span>, flags=<span class="n">0</span>, _=<span class="k">None</span>)
+  </div>
+
+  <div class="pipe">&darr;</div>
+
+  <div class="term">
+    <span class="label">app/calibration.py · 164-177</span>
+<span class="k">def</span> <span class="f">on_mouse</span>(event, x, y, flags, _):
+    <span class="k">if</span> event == EVENT_LBUTTONDOWN <span class="k">and</span> <span class="f">len</span>(state[<span class="s">"points"</span>]) &lt; <span class="n">4</span>:
+        state[<span class="s">"points"</span>].<span class="f">append</span>((x, y))
+  </div>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    <code>state["points"] = [(412, 128)]</code> &mdash; bir nokta kaydedildi. Sonsuz döngünün bir sonraki iterasyonunda bu nokta sarı daire olarak çizilir, talimat <em>"Tikla: SAG UST (2/4)"</em>'e döner.
+  </div>
+
+  <h2>2., 3., 4. Tıklamalar</h2>
+  <p>Aynı callback tekrar tetiklenir. <code>state["points"]</code> her tıklamada büyür: 1 nokta &rarr; 2 nokta &rarr; 3 nokta &rarr; 4 nokta. 5. tık yok sayılır (<code>len &lt; 4</code> kontrolü).</p>
+
+  <h3>Yan Etkiler &mdash; her tıklamadan sonra çizimde olan</h3>
+
+  <table>
+    <tr><th>Nokta sayısı</th><th>Çizilen şey</th><th>Talimat</th></tr>
+    <tr><td>1</td><td>1 sarı daire</td><td>Tikla: SAG UST (2/4)</td></tr>
+    <tr><td>2</td><td>2 sarı daire + 1 yeşil çizgi</td><td>Tikla: SAG ALT (3/4)</td></tr>
+    <tr><td>3</td><td>3 sarı daire + açık polygon (2 çizgi)</td><td>Tikla: SOL ALT (4/4)</td></tr>
+    <tr><td>4</td><td>4 sarı daire + kapalı polygon</td><td>ENTER=kaydet R=sifirla ESC=iptal</td></tr>
+  </table>
+
+  <div class="warn">
+    <strong>Sıra çok önemli:</strong> Sol Üst &rarr; Sağ Üst &rarr; Sağ Alt &rarr; Sol Alt. Sıra bozulursa homography yanlış oluşur, AR overlay ters döner. Yanlış tıklarsan <code>R</code> ile sıfırla.
+  </div>
+
+  <h2>Bonus Tuşlar &mdash; tıklama sırasında</h2>
+
+  <div class="keys">
+    <div class="key">SPACE</div><div>Aktif kareyi dondur. Eli sallanan webcam'de hassas tıklamayı kolaylaştırır.</div>
+    <div class="key">R</div><div>Tüm noktaları sil, frozen'ı kaldır, baştan başla.</div>
+    <div class="key">ESC</div><div>Kalibrasyonu iptal et. <code>KeyboardInterrupt</code> fırlatılır, program ölür.</div>
+  </div>
+
+  <span class="page-tag">Bölüm 5b · Tıklamalar</span>
+  <span class="page-number">— 08 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 9 — Homography -->
+<!-- ============================================================ -->
+<div class="page" id="s6">
+  <h1>6. ENTER &mdash; Homography Hesaplanıyor</h1>
+  <p class="lede">Kullanıcı 4 nokta seçtikten sonra ENTER'a basar. Burada matematiğin asıl kısmı çalışır: kameranın eğri perspektifi ile chart-uzayı arasında matris köprü.</p>
+
+  <div class="action">
+    <div class="who">Kullanıcı</div>
+    <div class="what">ENTER (veya Return) tuşuna bastı.</div>
+  </div>
+
+  <div class="term">
+    <span class="label">app/calibration.py · 318-320</span>
+<span class="k">if</span> key <span class="k">in</span> (<span class="n">10</span>, <span class="n">13</span>) <span class="k">and</span> <span class="f">len</span>(state[<span class="s">"points"</span>]) == <span class="n">4</span>:
+    <span class="k">break</span>
+  </div>
+
+  <p>Sonsuz döngü kırılır, fonksiyon 4 nokta + frame_size döner.</p>
+
+  <h3>save_calibration tetiklenir</h3>
+
+  <div class="term">
+    <span class="label">app/calibration.py · 333-360</span>
+H_chart_to_cam, H_cam_to_chart = <span class="f">compute_homography</span>(corners, rows, cols)
+
+data = {
+    <span class="s">"rows"</span>: rows, <span class="s">"cols"</span>: cols,
+    <span class="s">"camera_corners"</span>: corners.<span class="f">tolist</span>(),
+    <span class="s">"frame_size"</span>: <span class="f">list</span>(frame_size),
+    <span class="s">"H_chart_to_cam"</span>: H_chart_to_cam.<span class="f">tolist</span>(),
+    <span class="s">"H_cam_to_chart"</span>: H_cam_to_chart.<span class="f">tolist</span>(),
+}
+out_path.<span class="f">write_text</span>(json.<span class="f">dumps</span>(data, indent=<span class="n">2</span>))
+  </div>
+
+  <h3>Asıl matris hesabı</h3>
+
+  <div class="term">
+    <span class="label">app/calibration.py · 108-140</span>
+src_chart = np.<span class="f">array</span>([
+    [<span class="n">0</span>, <span class="n">0</span>],
+    [cols, <span class="n">0</span>],
+    [cols, rows],
+    [<span class="n">0</span>, rows],
+], dtype=np.float32)                         <span class="c"># chart birimleri</span>
+
+dst_cam = camera_corners                      <span class="c"># kullanıcı tıkladı</span>
+
+H_chart_to_cam = cv2.<span class="f">getPerspectiveTransform</span>(src_chart, dst_cam)
+H_cam_to_chart = np.linalg.<span class="f">inv</span>(H_chart_to_cam)
+  </div>
+
+  <h2>Bu Matrisler Ne İşe Yarar?</h2>
+
+  <table>
+    <tr><th>Matris</th><th>Hangi yönü çevirir?</th><th>Hangi modül kullanır?</th></tr>
+    <tr><td><code>H_chart_to_cam</code></td><td>chart-birim &rarr; kamera-piksel</td><td><strong>overlay.py</strong> (şablonu kameraya bindirmek için)</td></tr>
+    <tr><td><code>H_cam_to_chart</code></td><td>kamera-piksel &rarr; chart-birim</td><td><strong>progress.py</strong>, <strong>color_check.py</strong> (kamerayı düzleştirmek için)</td></tr>
+  </table>
+
+  <div class="info">
+    <strong>Neden 4 nokta yeter?</strong> 3x3 perspektif matrisinin 8 bilinmeyeni var (son hücresi sabit 1). Her nokta eşleşmesi 2 denklem verir (x ve y için). 4 nokta &times; 2 = 8 denklem &mdash; tam çözülür.
+  </div>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    <code>assets/calibration.json</code> dosyası oluştu. Pencere kapandı (<code>cv2.destroyWindow</code>). Kontrol <code>main.py</code>'a döndü. Homography artık bellekte numpy array olarak hazır.
+  </div>
+
+  <span class="page-tag">Bölüm 6 · Homography</span>
+  <span class="page-number">— 09 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 10 — Çalışan nesnelerin kurulumu -->
+<!-- ============================================================ -->
+<div class="page" id="s7">
+  <h1>7. Çalışan Nesnelerin Kurulumu</h1>
+  <p class="lede">Kalibrasyon bitti. Şimdi ana döngü başlamadan önce dört yardımcı nesne kurulur. Her birinin <code>__post_init__</code>'i ağır ön-hesabı bir kez yapar.</p>
+
+  <div class="term">
+    <span class="label">app/main.py · 153-161</span>
+tracker  = <span class="f">ProgressTracker</span>(rows=chart.rows, cols=chart.cols, direction=direction)
+renderer = <span class="f">OverlayRenderer</span>(chart, direction=direction)
+ui       = <span class="f">UIRenderer</span>()
+backend  = <span class="f">HSVBackend</span>(chart.palette_rgb)
+
+cv2.<span class="f">namedWindow</span>(<span class="s">"MOTIFIKA"</span>, WINDOW_NORMAL)
+  </div>
+
+  <h2>Her sınıf ne hazırlıyor?</h2>
+
+  <h3>OverlayRenderer (overlay.py · 130-174)</h3>
+  <p><code>_build_chart_layer()</code> bir kez çalışır. Tüm chart'ın <code>(rows*16, cols*16, 3)</code> boyutlu BGR bitmap'ini hazırlar; üzerine ızgara çizgileri çizer. Bu bitmap her render'da yeniden yapılırsa CPU yanar &mdash; bu yüzden bir kez bellekte tutulur.</p>
+
+  <div class="term">
+    <span class="label">overlay.py · 138-174 (özet)</span>
+layer = chart.palette_bgr[chart.grid]              <span class="c"># fancy index</span>
+layer = np.<span class="f">repeat</span>(np.<span class="f">repeat</span>(layer, <span class="n">16</span>, axis=<span class="n">0</span>), <span class="n">16</span>, axis=<span class="n">1</span>)
+<span class="k">for</span> r <span class="k">in</span> <span class="f">range</span>(rows + <span class="n">1</span>):
+    cv2.<span class="f">line</span>(layer, (<span class="n">0</span>, r*<span class="n">16</span>), (w, r*<span class="n">16</span>), (<span class="n">40</span>, <span class="n">40</span>, <span class="n">40</span>), <span class="n">1</span>)
+<span class="k">for</span> c <span class="k">in</span> <span class="f">range</span>(cols + <span class="n">1</span>):
+    cv2.<span class="f">line</span>(layer, (c*<span class="n">16</span>, <span class="n">0</span>), (c*<span class="n">16</span>, h), (<span class="n">40</span>, <span class="n">40</span>, <span class="n">40</span>), <span class="n">1</span>)
+self._chart_layer = layer
+  </div>
+
+  <h3>HSVBackend (color_check.py · 74-109)</h3>
+  <p>Palet RGB &rarr; LAB renk uzayına çevrilip cache'lenir. <strong>Neden LAB?</strong> Çünkü RGB'de iki renk arasındaki Öklid mesafesi gözle görünen farkı yansıtmaz; LAB'de yansıtır. Bu yüzden "hangi palet rengine en yakın" sorusu LAB'de daha doğru cevaplanır.</p>
+
+  <div class="term">
+    <span class="label">color_check.py · 88-109</span>
+bgr = self.palette_rgb[:, ::-<span class="n">1</span>][None, :, :]
+self._palette_lab = cv2.<span class="f">cvtColor</span>(bgr, COLOR_BGR2LAB)[<span class="n">0</span>]
+  </div>
+
+  <h3>ProgressTracker (progress.py · 73-87)</h3>
+  <p>Sadece üç durum değişkenini sıfırlar:</p>
+  <ul>
+    <li><code>_score_ema = None</code> (henüz kare gelmedi)</li>
+    <li><code>_active_row = 0</code></li>
+    <li><code>_manual_delta = 0</code> (kullanıcı henüz +/- basmadı)</li>
+  </ul>
+
+  <h3>UIRenderer (ui.py)</h3>
+  <p>Hiç ön-hesabı yok. Sadece sabitleri tutar (<code>panel_width=480</code>).</p>
+
+  <h3>Pencere açılır</h3>
+  <p><code>cv2.namedWindow("MOTIFIKA", WINDOW_NORMAL)</code> &mdash; ana ekran çerçevesi açılır. Henüz boş; <code>imshow</code> çağrılmadığı için siyah olarak görünür.</p>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    Tüm yardımcı nesneler hazır. Kamera açık. Homography matrisleri yüklü. Ana döngü başlamak üzere.
+  </div>
+
+  <span class="page-tag">Bölüm 7 · Kurulum</span>
+  <span class="page-number">— 10 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 11 — Ana döngü -->
+<!-- ============================================================ -->
+<div class="page" id="s8">
+  <h1>8. Ana Döngü &mdash; her karede arka planda</h1>
+  <p class="lede">Bu, uygulamanın kalbi. Saniyede ~25-30 kez döner. Kullanıcı hiçbir şey yapmasa bile sürekli çalışır. Her iterasyon = bir kare = bir tick.</p>
+
+  <div class="term">
+    <span class="label">app/main.py · 169-245 (kabaca)</span>
+<span class="k">while</span> <span class="k">True</span>:
+    frame = <span class="f">provider</span>()                       <span class="c"># 1. kamera kare</span>
+    <span class="k">if</span> frame <span class="k">is</span> <span class="k">None</span>: <span class="k">break</span>
+    frame_idx += <span class="n">1</span>
+
+    active_row = tracker.<span class="f">update</span>(frame, ...)    <span class="c"># 2. aktif sıra tespiti</span>
+
+    <span class="k">if</span> do_color_check <span class="k">and</span> frame_idx % <span class="n">5</span> == <span class="n">0</span>:
+        last_mismatches = <span class="f">check_active_row</span>(...) <span class="c"># 3. renk kontrolü</span>
+
+    ar_view = renderer.<span class="f">render</span>(frame, ...)      <span class="c"># 4. AR overlay</span>
+    ar_view = <span class="f">_resize_to_height</span>(ar_view, <span class="n">720</span>)
+
+    panel = ui.<span class="f">render_panel</span>(...)              <span class="c"># 5. sağ panel</span>
+    composed = ui.<span class="f">compose</span>(ar_view, panel)      <span class="c"># 6. yan yana</span>
+
+    cv2.<span class="f">putText</span>(composed, <span class="s">f"{fps:.1f} FPS"</span>, ...)
+    cv2.<span class="f">imshow</span>(<span class="s">"MOTIFIKA"</span>, composed)         <span class="c"># 7. ekrana bas</span>
+
+    key = cv2.<span class="f">waitKey</span>(<span class="n">1</span>) &amp; <span class="n">0xFF</span>          <span class="c"># 8. tuş dinle</span>
+    <span class="k">if</span> key == <span class="f">ord</span>(<span class="s">"q"</span>): <span class="k">break</span>
+    ...
+  </div>
+
+  <h2>Adımların Görsel Özeti</h2>
+
+  <div class="diagram">
+   provider()                               <strong>BGR kare (1280x720)</strong>
+       |
+       +---&gt; tracker.update() ---&gt; warp + skor + EMA ---&gt; <strong>active_row</strong>
+       |
+       +---&gt; (her 5'te 1) check_active_row() ---&gt; <strong>mismatches</strong>
+       |
+       +---&gt; renderer.render() ---&gt; warp + alpha blend ---&gt; <strong>ar_view</strong>
+       |
+       +---&gt; ui.render_panel() ---&gt; başlık + şerit + uyarı ---&gt; <strong>panel</strong>
+       |
+       +---&gt; ui.compose() ---&gt; np.hstack ---&gt; <strong>composed</strong>
+       |
+       +---&gt; cv2.imshow + waitKey(1) ---&gt; <strong>ekran + tuş</strong>
+  </div>
+
+  <div class="info">
+    <strong>FPS gizli sırrı:</strong> <code>cv2.waitKey(1)</code> sadece 1 ms bekler. Kasıtlı &mdash; "olabildiğince hızlı dön" anlamına gelir. Bu olmasa pencere donar (OS event loop'una nefes alma fırsatı vermez).
+  </div>
+
+  <h3>FPS hesabı (her tick)</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 201-210</span>
+t_now = time.<span class="f">time</span>()
+inst_fps = <span class="n">1.0</span> / <span class="f">max</span>(t_now - t_prev, <span class="n">1e-6</span>)
+fps_ema = <span class="n">0.85</span> * fps_ema + <span class="n">0.15</span> * inst_fps    <span class="c"># yumuşatma</span>
+t_prev = t_now
+cv2.<span class="f">putText</span>(composed, <span class="s">f"{fps_ema:.1f} FPS"</span>, ...)
+  </div>
+
+  <span class="page-tag">Bölüm 8 · Ana Döngü</span>
+  <span class="page-number">— 11 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 12 — Dokurken -->
+<!-- ============================================================ -->
+<div class="page" id="s9">
+  <h1>9. Kullanıcı Dokurken &mdash; canlı tespit</h1>
+  <p class="lede">Kullanıcı kilim dokuyor; eli atkı ipliğini sıraya yerleştiriyor. Kameranın gördüğü değişiyor. Her karede ne oluyor?</p>
+
+  <div class="action">
+    <div class="who">Kullanıcı</div>
+    <div class="what">Bir sıraya iplik koymaya devam ediyor; eller kameraya görünür halde.</div>
+  </div>
+
+  <h2>Adım 1: Kareyi düzleştir</h2>
+
+  <div class="term">
+    <span class="label">app/progress.py · 90-108</span>
+scale = np.<span class="f">array</span>([[<span class="n">12</span>,<span class="n">0</span>,<span class="n">0</span>], [<span class="n">0</span>,<span class="n">12</span>,<span class="n">0</span>], [<span class="n">0</span>,<span class="n">0</span>,<span class="n">1</span>]])
+M = scale @ H_cam_to_chart                    <span class="c"># tek matriste birleştir</span>
+out_size = (cols * <span class="n">12</span>, rows * <span class="n">12</span>)
+warped = cv2.<span class="f">warpPerspective</span>(frame, M, out_size, INTER_LINEAR)
+  </div>
+
+  <p>Kameradaki yamuk perspektif düzleşir. <strong>Kuş bakışı</strong> görüntü çıkar &mdash; kilim sanki üstten dik bakılmış gibi. Boyut <code>cols*12 &times; rows*12</code> piksel.</p>
+
+  <h2>Adım 2: Her sıraya bir skor ver</h2>
+
+  <div class="term">
+    <span class="label">app/progress.py · 111-155</span>
+gray = cv2.<span class="f">cvtColor</span>(warped, COLOR_BGR2GRAY)
+<span class="k">for</span> r <span class="k">in</span> <span class="f">range</span>(rows):
+    band = gray[r*<span class="n">12</span> : (r+<span class="n">1</span>)*<span class="n">12</span>]                <span class="c"># o sıranın şeridi</span>
+    std_h    = <span class="f">float</span>(band.<span class="f">std</span>())                  <span class="c"># varyans</span>
+    darkness = <span class="n">1.0</span> - <span class="f">float</span>(band.<span class="f">mean</span>()) / <span class="n">255.0</span>
+    scores[r] = <span class="n">0.6</span> * std_h / <span class="n">80.0</span> + <span class="n">0.4</span> * darkness
+  </div>
+
+  <p>Sezgi: <strong>boş kilim = açık çözgü ipi = tek tonda &rarr; varyans düşük, parlaklık yüksek</strong>. <strong>Dokunmuş = renkli iplikler &rarr; varyans yüksek, koyu</strong>. İkisinin karışımı (0.6 ve 0.4 ağırlık) güvenilir bir skor verir.</p>
+
+  <h2>Adım 3: Yumuşat (EMA)</h2>
+
+  <div class="term">
+    <span class="label">app/progress.py · 167-175</span>
+score_ema = <span class="n">0.4</span> * scores + <span class="n">0.6</span> * old_ema
+  </div>
+
+  <p>Anlık skorda titreşim olur (gölge, el geçiyor, kamera shake). EMA bu titreşimi süzer; trendi korur.</p>
+
+  <h2>Adım 4: Eşik geçişini bul</h2>
+
+  <div class="term">
+    <span class="label">app/progress.py · 188-220</span>
+peak      = score_ema.<span class="f">max</span>()
+threshold = peak * <span class="n">0.55</span>
+woven     = score_ema &gt;= threshold              <span class="c"># bool dizi</span>
+
+<span class="k">if</span> direction == <span class="s">"bottom_up"</span>:
+    idxs = np.<span class="f">where</span>(woven)[<span class="n">0</span>]
+    auto_row = <span class="f">int</span>(idxs.<span class="f">min</span>()) - <span class="n">1</span>     <span class="c"># bir üstü = aktif</span>
+    auto_row = <span class="f">max</span>(-<span class="n">1</span>, auto_row)
+  </div>
+
+  <p>Bottom-up'ta dokuma alttan başlar; en yukarıdaki "dokunmuş" sıra = son tamamlanan; bir üstü = aktif sıra. Top-down'da ters.</p>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    <code>active_row = 14</code> &mdash; aktif sıra tespit edildi (örnek). Bu değer overlay'de sarı çerçeve, panelde "Sira: 14 / 30" olarak görünecek.
+  </div>
+
+  <span class="page-tag">Bölüm 9 · Canlı Tespit</span>
+  <span class="page-number">— 12 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 13 — Renk kontrolü -->
+<!-- ============================================================ -->
+<div class="page" id="s10">
+  <h1>10. Renk Kontrolü &mdash; her 5 karede bir</h1>
+  <p class="lede">Bir sıra tamamlandığında, "doğru renkler kullanıldı mı?" diye otomatik kontrol edilir. Bu adım her karede değil, 5 karede 1 yapılır (CPU tasarrufu).</p>
+
+  <h3>Tetiklenme</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 179-188</span>
+<span class="k">if</span> do_color_check <span class="k">and</span> frame_idx % COLOR_CHECK_EVERY_N == <span class="n">0</span>:
+    check_row = <span class="f">last_completed_row</span>(active_row, chart.rows, direction)
+    <span class="k">if</span> check_row <span class="k">is not</span> <span class="k">None</span>:
+        last_mismatches = <span class="f">check_active_row</span>(
+            frame, H_cam_to_chart, chart, check_row, backend,
+        )
+  </div>
+
+  <div class="info">
+    <strong>İncelik:</strong> kontrol AKTİF sırada DEĞİL, <em>bir önceki tamamlanmış</em> sırada yapılır. Çünkü aktif sıra henüz yarım; yarım hücreler hatalı sinyal verir.
+  </div>
+
+  <h2>Aşama 1: Hücre rengini örnekle</h2>
+
+  <div class="term">
+    <span class="label">app/color_check.py · 204-253</span>
+warped = cv2.<span class="f">warpPerspective</span>(frame, M, out_size, INTER_LINEAR)
+band   = warped[check_row*<span class="n">12</span> : (check_row+<span class="n">1</span>)*<span class="n">12</span>]   <span class="c"># sıranın şeridi</span>
+
+pad = <span class="n">12</span> // <span class="n">4</span>                                      <span class="c"># 3 piksel kenardan</span>
+<span class="k">for</span> c <span class="k">in</span> <span class="f">range</span>(cols):
+    block = band[pad:<span class="n">12</span>-pad, c*<span class="n">12</span>+pad : (c+<span class="n">1</span>)*<span class="n">12</span>-pad]
+    samples[c] = block.<span class="f">reshape</span>(-<span class="n">1</span>, <span class="n">3</span>).<span class="f">mean</span>(axis=<span class="n">0</span>)  <span class="c"># orta %50 ortalaması</span>
+  </div>
+
+  <p>Hücrenin <strong>sadece orta %50 alanından</strong> renk alınır. Kenarlarda ızgara çizgisi (40,40,40 koyu gri) ve komşu hücre kontaminasyonu var; ortası temiz.</p>
+
+  <h2>Aşama 2: LAB uzayında en yakın paleti bul</h2>
+
+  <div class="term">
+    <span class="label">app/color_check.py · 112-162</span>
+lab = cv2.<span class="f">cvtColor</span>(samples_bgr.<span class="f">reshape</span>(-<span class="n">1</span>, <span class="n">1</span>, <span class="n">3</span>), COLOR_BGR2LAB)
+lab = lab.<span class="f">reshape</span>(-<span class="n">1</span>, <span class="n">3</span>)
+
+<span class="c"># BROADCASTING ile (N, k) mesafe matrisi &mdash; vektörize</span>
+diff = lab[:, <span class="k">None</span>, :] - self._palette_lab[<span class="k">None</span>, :, :]
+dist = np.linalg.<span class="f">norm</span>(diff, axis=<span class="n">2</span>)         <span class="c"># Öklid mesafesi</span>
+idx  = dist.<span class="f">argmin</span>(axis=<span class="n">1</span>)                  <span class="c"># en yakın renk</span>
+  </div>
+
+  <h2>Aşama 3: Karşılaştır</h2>
+
+  <div class="term">
+    <span class="label">app/color_check.py · 301-318</span>
+expected_idx = chart.grid[check_row]            <span class="c"># beklenen renkler</span>
+mismatches = []
+<span class="k">for</span> c <span class="k">in</span> <span class="f">range</span>(cols):
+    <span class="k">if</span> observed_idx[c] != expected_idx[c]:
+        mismatches.<span class="f">append</span>((c, expected_idx[c], observed_idx[c], dist))
+  </div>
+
+  <div class="result">
+    <div class="head">Örnek Sonuç</div>
+    <code>mismatches = [(12, 0, 2, 18.4), (15, 0, 3, 25.1)]</code><br>
+    Sütun 12'de Kırmızı yerine Krem; sütun 15'te Kırmızı yerine Siyah. Bu, sağ panelde "S14.12: Kırmızı yerine Krem" olarak Türkçe gösterilecek.
+  </div>
+
+  <span class="page-tag">Bölüm 10 · Renk Kontrolü</span>
+  <span class="page-number">— 13 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 14 — Tuşlar -->
+<!-- ============================================================ -->
+<div class="page" id="s11">
+  <h1>11. Tuş Tepkileri &mdash; her tuşun kod yolu</h1>
+  <p class="lede">Ana döngüdeki <code>cv2.waitKey(1)</code> son basılan tuşu döndürür. Aşağıda her tuşun ne yaptığı.</p>
+
+  <h3>+ veya = &mdash; Aktif sırayı +1</h3>
+
+  <div class="action"><div class="who">Kullanıcı</div><div class="what"><code>+</code> tuşuna bastı.</div></div>
+
+  <div class="term">
+    <span class="label">app/main.py · 218-220 &rarr; progress.py · 229-235</span>
+<span class="k">elif</span> key <span class="k">in</span> (<span class="f">ord</span>(<span class="s">"+"</span>), <span class="f">ord</span>(<span class="s">"="</span>)):
+    tracker.<span class="f">bump</span>(+<span class="n">1</span>)
+
+<span class="c"># bump():</span>
+self._manual_delta += delta
+self._active_row    = <span class="f">max</span>(<span class="n">0</span>, <span class="f">min</span>(rows, self._active_row + delta))
+  </div>
+
+  <div class="result">
+    <div class="head">Sonuç</div>
+    <code>_manual_delta</code> kalıcı olarak +1 olur. Sonraki update'lerde otomatik tahmin yine yapılır ama bu offset her seferinde eklenir. Yani manuel düzeltme kalıcıdır &mdash; otomatik tahmini sürekli ezer.
+  </div>
+
+  <h3>- veya _ &mdash; Aktif sırayı -1</h3>
+  <p>Aynı mantık, <code>bump(-1)</code>.</p>
+
+  <h3>r veya R &mdash; Yeniden kalibrasyon</h3>
+
+  <div class="action"><div class="who">Kullanıcı</div><div class="what">Kilim biraz kaymış, kalibrasyonu sıfırlamak istiyor. <code>r</code> tuşuna bastı.</div></div>
+
+  <div class="term">
+    <span class="label">app/main.py · 223-232</span>
+<span class="k">elif</span> key <span class="k">in</span> (<span class="f">ord</span>(<span class="s">"r"</span>), <span class="f">ord</span>(<span class="s">"R"</span>)):
+    cv2.<span class="f">destroyWindow</span>(<span class="s">"MOTIFIKA"</span>)
+    cal_data = <span class="f">run_calibration_flow</span>(...)        <span class="c"># 4 köşe iste</span>
+    H_chart_to_cam = np.<span class="f">array</span>(cal_data[<span class="s">"H_chart_to_cam"</span>])
+    H_cam_to_chart = np.<span class="f">array</span>(cal_data[<span class="s">"H_cam_to_chart"</span>])
+    cv2.<span class="f">namedWindow</span>(<span class="s">"MOTIFIKA"</span>, WINDOW_NORMAL)
+  </div>
+
+  <p>Ana pencere kapanır, kalibrasyon penceresi açılır (Bölüm 5'teki tüm akış tekrar koşar), bittikten sonra ana pencere yeniden açılır. Yeni matrisler hemen geçerli olur.</p>
+
+  <h3>d veya D &mdash; Yön değiştir</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 233-239</span>
+direction = <span class="s">"top_down"</span> <span class="k">if</span> direction == <span class="s">"bottom_up"</span> <span class="k">else</span> <span class="s">"bottom_up"</span>
+tracker.direction  = direction
+renderer.direction = direction
+tracker.<span class="f">reset_manual</span>()                              <span class="c"># offset geçersiz</span>
+  </div>
+
+  <div class="info">
+    <strong>Neden reset_manual?</strong> Bottom-up için biriktirilen <code>_manual_delta</code> top-down'da ters anlama gelir. Sıfırlanmazsa kullanıcının önceki düzeltmesi yanlış yöne kayar.
+  </div>
+
+  <h3>c veya C &mdash; Renk kontrolünü aç/kapat</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 240-245</span>
+do_color_check = <span class="k">not</span> do_color_check
+<span class="k">if not</span> do_color_check:
+    last_mismatches = []                            <span class="c"># eski uyarıları sil</span>
+  </div>
+
+  <h3>q veya ESC &mdash; Çıkış</h3>
+
+  <div class="term">
+    <span class="label">app/main.py · 215-217</span>
+<span class="k">if</span> key <span class="k">in</span> (<span class="n">27</span>, <span class="f">ord</span>(<span class="s">"q"</span>)):                   <span class="c"># 27 = ESC</span>
+    <span class="k">break</span>
+  </div>
+
+  <p><code>break</code> ile sonsuz döngüden çıkılır. Sonraki sayfada açıklanan <code>finally</code> bloğu çalışır.</p>
+
+  <span class="page-tag">Bölüm 11 · Tuşlar</span>
+  <span class="page-number">— 14 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 15 — Çıkış -->
+<!-- ============================================================ -->
+<div class="page" id="s12">
+  <h1>12. Çıkış &mdash; kaynaklar serbest bırakılır</h1>
+  <p class="lede">Sebep ne olursa olsun (kullanıcı çıktı, hata oldu, kamera koptu) kamera ve pencereler düzgün kapanmalı. Aksi halde kamera kilitli kalır.</p>
+
+  <div class="term">
+    <span class="label">app/main.py · 246-250</span>
+<span class="k">finally</span>:
+    <span class="k">if</span> cap <span class="k">is not</span> <span class="k">None</span>:
+        cap.<span class="f">release</span>()
+    cv2.<span class="f">destroyAllWindows</span>()
+  </div>
+
+  <h3>finally Neden Önemli?</h3>
+  <p><code>try/finally</code> blokları Python'a "bu blok ne olursa olsun çalışsın" der &mdash; <code>break</code>, <code>return</code>, exception, hatta <code>SystemExit</code> bile <code>finally</code>'yi atlatamaz.</p>
+
+  <table>
+    <tr><th>Çıkış sebebi</th><th>finally çalışır mı?</th></tr>
+    <tr><td><code>q</code> tuşu (break)</td><td>Evet</td></tr>
+    <tr><td>Kamera koptu (provider None döner, break)</td><td>Evet</td></tr>
+    <tr><td>Beklenmedik exception (warp boyutu uymaz vs.)</td><td>Evet</td></tr>
+    <tr><td>Ctrl+C (KeyboardInterrupt)</td><td>Evet</td></tr>
+    <tr><td>Kill -9</td><td>Hayır (sürecin başına çare yok)</td></tr>
+  </table>
+
+  <h3>cap.release() ne yapıyor?</h3>
+  <p>V4L2 sürücüsüne "kamerayı bırakıyorum" der; <code>/dev/video0</code> aygıtı serbest kalır, başka uygulama (veya bir sonraki çalıştırma) kullanabilir.</p>
+
+  <div class="warn">
+    <strong>release çağrılmazsa:</strong> Kamera bazı sistemlerde 30+ saniye kilitli kalabilir. Yeni çalıştırmada "kamera açılamadı" hatası alırsın. <code>finally</code> bloğu bu yüzden var.
+  </div>
+
+  <h3>destroyAllWindows ne yapıyor?</h3>
+  <p>OpenCV'nin açtığı tüm pencereleri kapatır. <code>cv2.namedWindow</code> ile açılan her pencere bu sırada yok edilir.</p>
+
+  <div class="result">
+    <div class="head">Son Durum</div>
+    <ul>
+      <li>Kamera serbest</li>
+      <li>Pencereler kapalı</li>
+      <li>Python süreci sonlanıyor</li>
+      <li><code>assets/calibration.json</code> ve chart dosyaları diskte kalır &mdash; bir sonraki çalıştırmada tekrar kullanılır</li>
+    </ul>
+  </div>
+
+  <h2>Bir Sonraki Çalıştırmada Ne Olur?</h2>
+  <ol>
+    <li>Komut tekrar yazılır.</li>
+    <li><code>ensure_chart</code> chart'ı bulur, üretmez.</li>
+    <li><code>load_calibration</code> kalibrasyonu bulur, <code>cal_match</code> True olur.</li>
+    <li>Kalibrasyon ekranı <strong>açılmaz</strong>; doğrudan ana döngüye girilir.</li>
+  </ol>
+
+  <p>Yani ilk açılış maliyeti bir kerelik. Sonraki kullanımlar saniyede başlar.</p>
+
+  <span class="page-tag">Bölüm 12 · Çıkış</span>
+  <span class="page-number">— 15 —</span>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 16 — Hızlı Referans / SON -->
+<!-- ============================================================ -->
+<div class="page">
+  <h1>Hızlı Referans</h1>
+  <p class="lede">Tek sayfada hatırlatıcı. Yazdırıp masaya koy.</p>
+
+  <h2>Klavye</h2>
+  <div class="keys">
+    <div class="key">+ / =</div><div>aktif sırayı +1</div>
+    <div class="key">- / _</div><div>aktif sırayı -1</div>
+    <div class="key">r / R</div><div>yeniden kalibrasyon (4 köşeyi tekrar tıkla)</div>
+    <div class="key">d / D</div><div>yön değiştir (bottom_up &harr; top_down)</div>
+    <div class="key">c / C</div><div>renk kontrolünü aç/kapat</div>
+    <div class="key">q / ESC</div><div>çıkış</div>
+  </div>
+
+  <h2>Kalibrasyon Sırasında</h2>
+  <div class="keys">
+    <div class="key">SOL TIK</div><div>köşe noktası ekle (en fazla 4)</div>
+    <div class="key">SPACE</div><div>kareyi dondur (hassas tıklama için)</div>
+    <div class="key">R</div><div>noktaları sıfırla</div>
+    <div class="key">ENTER</div><div>4 nokta tamsa kaydet ve çık</div>
+    <div class="key">ESC</div><div>kalibrasyonu iptal et (program ölür)</div>
+  </div>
+
+  <h2>Sık Çağrılan Komutlar</h2>
+
+  <div class="term">
+    <span class="label">terminal · ana çalışma</span>
+<span class="p">$</span> python -m app.main --motif eli_belinde --rows <span class="n">30</span> --cols <span class="n">60</span> --camera <span class="n">0</span>
+<span class="p">$</span> python -m app.main --motif eli_belinde --rows <span class="n">30</span> --cols <span class="n">60</span> --recalibrate
+<span class="p">$</span> python -m app.main --motif eli_belinde --rows <span class="n">30</span> --cols <span class="n">60</span> --image kilim.jpg
+<span class="p">$</span> python -m app.main --motif eli_belinde --rows <span class="n">30</span> --cols <span class="n">60</span> --no-color-check
+  </div>
+
+  <div class="term">
+    <span class="label">terminal · yan araçlar</span>
+<span class="c"># Sadece chart üret</span>
+<span class="p">$</span> python -m app.pattern motif.jpg --rows <span class="n">30</span> --cols <span class="n">60</span> --palette <span class="n">4</span> --out chart.json
+
+<span class="c"># Sadece kalibrasyon</span>
+<span class="p">$</span> python -m app.calibration --rows <span class="n">30</span> --cols <span class="n">60</span> --camera <span class="n">0</span>
+
+<span class="c"># Smoke test (overlay)</span>
+<span class="p">$</span> python -m app.overlay --chart chart.json --calibration cal.json
+  </div>
+
+  <h2>Sorun &rarr; Çözüm</h2>
+  <table>
+    <tr><th>Sorun</th><th>Yapılacak</th></tr>
+    <tr><td>"kamera açılamadı"</td><td>Başka uygulamayı kapat. <code>video</code> grubunda olduğunu doğrula.</td></tr>
+    <tr><td>Aktif sıra yanlış</td><td><code>+</code> / <code>-</code> ile düzelt.</td></tr>
+    <tr><td>AR overlay kayık</td><td><code>r</code> tuşu ile yeniden kalibre et.</td></tr>
+    <tr><td>FPS düşük</td><td>main.py'da <code>frame_size_hint</code>'i 640x480'e düşür.</td></tr>
+    <tr><td>Renk uyarıları çok</td><td>Aydınlatmayı kontrol et. Sorun devam ederse <code>c</code> ile kapat.</td></tr>
+    <tr><td>Yön ters</td><td><code>d</code> tuşu.</td></tr>
+  </table>
+
+  <div class="ok">
+    <strong>Son söz:</strong> Bu belge baştan sona kullanıcı eylemleriyle paralel olarak yazıldı. Sırasız okumak da mümkün; her sayfa kendi başına da okunabilir. Yeni bir özellik eklediğinde bu belgeyi de güncel tutmayı unutma.
+  </div>
+
+  <span class="page-tag">SON</span>
+  <span class="page-number">— 16 —</span>
+</div>
+
+</div><!-- /doc -->
+</body>
+</html>
