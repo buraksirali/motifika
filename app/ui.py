@@ -192,7 +192,7 @@ class UIRenderer:
 
         # Klavye yardımı — panelin en altına sabit.
         y_help = height - 50
-        for line in ["[+/-] sira ayarla", "[r] kalibrasyon", "[q] cikis"]:
+        for line in ["[yukari/asagi ok] sira", "[r] kalibrasyon", "[q] cikis"]:
             cv2.putText(panel, line, (12, y_help), font, 0.5, (160, 160, 160), 1)
             y_help += 18
         return panel

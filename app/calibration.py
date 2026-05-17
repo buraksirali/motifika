@@ -63,8 +63,14 @@ def compute_homography(camera_corners: np.ndarray, rows: int, cols: int):
     return H_chart_to_cam, H_cam_to_chart
 
 
-def collect_corners_interactive(frame_provider, rows: int, cols: int) -> tuple[np.ndarray, tuple[int, int]]:
-    """Pencerede 4 köşeye tıklatır. frame_provider() güncel kareyi döndürür."""
+def collect_corners_interactive(
+    frame_provider, rows: int, cols: int, fullscreen: bool = False,
+) -> tuple[np.ndarray, tuple[int, int]]:
+    """Pencerede 4 köşeye tıklatır. frame_provider() güncel kareyi döndürür.
+
+    fullscreen=True ise kalibrasyon penceresi de tam ekran açılır — böylece
+    ana pencereyle aynı görünümde kalır, kalibrasyon ekran oranını bozmaz.
+    """
     # State dict: nested on_mouse nonlocal olmadan mutable nesneyi değiştirebilir.
     state = {"points": [], "frozen": None}
 
@@ -76,6 +82,8 @@ def collect_corners_interactive(frame_provider, rows: int, cols: int) -> tuple[n
 
     win = "MOTIFIKA - Kalibrasyon"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    if fullscreen:
+        cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.setMouseCallback(win, on_mouse)
 
     frame_size = None

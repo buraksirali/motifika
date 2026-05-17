@@ -8,7 +8,7 @@ Kullanım:
     python -m app.main --motif hayat_agaci --rows 50 --cols 30 --image kilim.jpg
 
 Klavye:
-    [+]/[=]   aktif sırayı +1       [-]   aktif sırayı -1
+    [yukarı ok] vurguyu yukarı taşı [aşağı ok]  vurguyu aşağı taşı
     [r]       kalibrasyonu sıfırla  [d]   yön değiştir
     [c]       renk kontrolü aç/kapat [q]/ESC  çıkış
 """
@@ -47,6 +47,12 @@ COLOR_CHECK_EVERY_N = 5
 # Kamera görüntüsünün ekrandaki SABİT kutu boyutu (W, H). Kamera zoom yapsa veya
 # farklı çözünürlük gelse de kutu — ve sağdaki panelin ekran oranı — sabit kalır.
 CAMERA_VIEW_SIZE = (1280, 720)
+
+# Yön tuşlarının waitKeyEx kodları — backend'e göre değişir (GTK / Qt / Windows).
+# waitKey()&0xFF bu kodları ASCII harflere çakıştırıyordu (Yukarı→'R' = kalibrasyon!),
+# o yüzden tam kodu waitKeyEx ile okuyup burada karşılaştırıyoruz.
+KEY_UP = {65362, 16777235, 2490368, 63232}
+KEY_DOWN = {65364, 16777237, 2621440, 63233}
 
 
 def ensure_chart(motif: str, rows: int, cols: int, palette: int) -> Path:
@@ -90,9 +96,10 @@ def open_camera_or_image(args, frame_size_hint=(1280, 720)):
     return provider, cap, (real_w, real_h)
 
 
-def run_calibration_flow(provider, rows, cols, frame_size, out_path: Path) -> dict:
+def run_calibration_flow(provider, rows, cols, frame_size, out_path: Path,
+                         fullscreen: bool = False) -> dict:
     """4 köşe topla → homography hesapla → JSON'a kaydet."""
-    corners, fs = collect_corners_interactive(provider, rows, cols)
+    corners, fs = collect_corners_interactive(provider, rows, cols, fullscreen)
     if fs is None:  # provider hiç frame vermediyse hint kullan
         fs = frame_size
     return save_calibration(out_path, rows, cols, corners, fs)
@@ -110,6 +117,8 @@ def main():
                     help="kamera yerine sabit görüntü ile test")
     ap.add_argument("--recalibrate", action="store_true")
     ap.add_argument("--no-color-check", action="store_true")
+    ap.add_argument("--fullscreen", action="store_true",
+                    help="MOTIFIKA penceresini tam ekran aç")
     args = ap.parse_args()
 
     # Chart hazırla / yükle.
@@ -133,7 +142,8 @@ def main():
     try:
         if args.recalibrate or not cal_match:
             print("kalibrasyon başlatılıyor: 4 köşeye SOL ÜST → SAĞ ÜST → SAĞ ALT → SOL ALT sırasıyla tıkla")
-            cal_data = run_calibration_flow(provider, args.rows, args.cols, frame_size, CAL_PATH)
+            cal_data = run_calibration_flow(provider, args.rows, args.cols, frame_size,
+                                            CAL_PATH, args.fullscreen)
             print(f"kalibrasyon kaydedildi: {CAL_PATH}")
 
         H_chart_to_cam = np.array(cal_data["H_chart_to_cam"], dtype=np.float64)
@@ -150,7 +160,7 @@ def main():
         do_color_check = not args.no_color_check
 
         win = "MOTIFIKA"
-        cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+        _make_window(win, args.fullscreen)
 
         frame_idx = 0
         last_mismatches: list = []  # son kontrol sonucu (ekrandan silmemek için cache)
@@ -203,22 +213,27 @@ def main():
             # ADIM 6: ekrana bas.
             cv2.imshow(win, composed)
 
-            # ADIM 7: klavye. waitKey OS event loop'u da işler — olmazsa pencere donar.
-            key = cv2.waitKey(1) & 0xFF
-            if key in (27, ord("q")):  # ESC / q → çıkış
-                break
-            elif key in (ord("+"), ord("=")):
-                tracker.bump(+1)
-            elif key in (ord("-"), ord("_")):
+            # ADIM 7: klavye. waitKeyEx OS event loop'u da işler — olmazsa pencere
+            # donar. waitKeyEx (waitKey değil): yön tuşlarının tam kodunu verir.
+            raw = cv2.waitKeyEx(1)
+            key = raw & 0xFF  # ASCII tuşlar için düşük bayt
+            # Ok tuşu = chart'ta görsel yön: sıra 0 üstte, son sıra altta.
+            # Yukarı ok → vurgu chart'ta yukarı (sıra index -1), Aşağı ok → aşağı.
+            if raw in KEY_UP:
                 tracker.bump(-1)
+            elif raw in KEY_DOWN:
+                tracker.bump(+1)
+            elif key in (27, ord("q")):  # ESC / q → çıkış
+                break
             elif key in (ord("r"), ord("R")):  # yeniden kalibrasyon
                 cv2.destroyWindow(win)
                 cal_data = run_calibration_flow(
                     provider, args.rows, args.cols, frame_size, CAL_PATH,
+                    args.fullscreen,
                 )
                 H_chart_to_cam = np.array(cal_data["H_chart_to_cam"], dtype=np.float64)
                 H_cam_to_chart = np.array(cal_data["H_cam_to_chart"], dtype=np.float64)
-                cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+                _make_window(win, args.fullscreen)
             elif key in (ord("d"), ord("D")):  # yön değiştir (toggle)
                 direction = "top_down" if direction == "bottom_up" else "bottom_up"
                 tracker.direction = direction
@@ -233,6 +248,17 @@ def main():
         if cap is not None:
             cap.release()
         cv2.destroyAllWindows()
+
+
+def _make_window(win: str, fullscreen: bool) -> None:
+    """MOTIFIKA penceresini oluştur; istenirse tam ekran moduna al.
+
+    WINDOW_NORMAL açılır pencere verir; fullscreen istenince pencere özelliği
+    WINDOW_FULLSCREEN'e çekilir — letterbox sayesinde görüntü oranı korunur.
+    """
+    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    if fullscreen:
+        cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 
 def _fit_to_box(img: np.ndarray, box_w: int, box_h: int) -> np.ndarray:
