@@ -3,6 +3,9 @@
 Sağ panel (Tetris next-piece tarzı): başlık, sıra sayacı, ilerleme çubuğu,
 önceki/şimdiki/sonraki sıra şeritleri, sıradaki renk özeti, hata uyarıları,
 klavye yardımı. compose() kamera görüntüsünü panelle yan yana birleştirir.
+
+Metin çizimi PIL ile yapılır: cv2.putText Hershey fontları Türkçe karakterleri
+(ı, ş, ğ, ç, ö, ü) "?" gösteriyordu; PIL + DejaVu TTF doğru render eder.
 """
 from __future__ import annotations
 
@@ -10,10 +13,17 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 
 PANEL_WIDTH = 480
-NEXT_ROW_CELL_PX = 26  # sağdaki şerit hücresi (overlay'den büyük, göz çeksin)
+PANEL_MARGIN = 24             # panel iç kenar boşluğu (sol/sağ/üst)
+NEXT_ROW_CELL_PX = 26         # sağdaki şerit hücresi (overlay'den büyük, göz çeksin)
+
+# Türkçe karakter içeren DejaVu TTF — Hershey'in aksine ı/ş/ğ/ç/ö/ü destekler.
+_FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+_FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+_font_cache: dict[tuple[int, bool], "ImageFont.FreeTypeFont"] = {}
 
 # Şu an KULLANILMIYOR; ileride kullanıcı paletinde Türkçe etiket için.
 TURKISH_COLOR_NAMES = {
@@ -21,6 +31,37 @@ TURKISH_COLOR_NAMES = {
     "siyah": "Siyah", "beyaz": "Beyaz", "kahverengi": "Kahverengi",
     "yesil": "Yeşil", "sari": "Sarı", "mavi": "Mavi", "bordo": "Bordo",
 }
+
+
+def _get_font(px: int, bold: bool) -> "ImageFont.FreeTypeFont":
+    """İstenen boyut/kalınlıkta TTF font (cache'li — her karede yeniden açma)."""
+    key = (px, bold)
+    font = _font_cache.get(key)
+    if font is None:
+        try:
+            font = ImageFont.truetype(_FONT_BOLD if bold else _FONT_REGULAR, px)
+        except OSError:
+            font = ImageFont.load_default()  # TTF yoksa son çare
+        _font_cache[key] = font
+    return font
+
+
+def _draw_texts(img_bgr: np.ndarray, items: list) -> None:
+    """Bir dizi metni tek PIL geçişiyle img üstüne çiz (UTF-8 / Türkçe güvenli).
+
+    items: [(metin, (x, y), px, renk_bgr, bold), ...]; y = metnin TABAN çizgisi.
+    Tek BGR↔RGB dönüşümü: her metin için ayrı dönüşüm yapmaktan çok daha hızlı.
+    """
+    if not items:
+        return
+    pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(pil)
+    for text, org, px, color_bgr, bold in items:
+        font = _get_font(px, bold)
+        rgb = (int(color_bgr[2]), int(color_bgr[1]), int(color_bgr[0]))
+        # anchor="ls": x sola, y taban çizgisine hizalı (cv2.putText org'una yakın).
+        draw.text(org, text, font=font, fill=rgb, anchor="ls")
+    img_bgr[:] = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
 
 def _color_name(rgb: np.ndarray) -> str:
@@ -51,6 +92,7 @@ def _color_name(rgb: np.ndarray) -> str:
 class UIRenderer:
     """Sağ paneli çizen ve kamera görüntüsüyle birleştiren sınıf."""
     panel_width: int = PANEL_WIDTH
+    margin: int = PANEL_MARGIN
     next_row_cell_px: int = NEXT_ROW_CELL_PX
 
     def render_next_strip(
@@ -58,15 +100,14 @@ class UIRenderer:
         chart,
         active_row: int,
         offset: int,
-        direction: str,
         target_w: int,
     ) -> np.ndarray:
-        """Aktif sıradan offset kadar uzaktaki sıranın renk şeridi (tam target_w piksel)."""
-        # bottom_up'ta sonraki sıra yukarıda (küçük indeks), top_down'da aşağıda.
-        if direction == "bottom_up":
-            row_idx = active_row - offset
-        else:
-            row_idx = active_row + offset
+        """Aktif sıradan offset kadar uzaktaki sıranın renk şeridi (tam target_w piksel).
+
+        offset geometrik: -1 chart'ta bir üst sıra, 0 şimdiki, +1 bir alt sıra.
+        Şeridin "önceki/sonraki" anlamı dokuma yönüne göre render_panel'de verilir.
+        """
+        row_idx = active_row + offset
 
         cell_px = self.next_row_cell_px
         h = cell_px
@@ -107,17 +148,19 @@ class UIRenderer:
     ) -> np.ndarray:
         """Sağ kontrol panelini çiz."""
         panel = np.full((height, self.panel_width, 3), 30, dtype=np.uint8)  # koyu gri zemin
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        y = 30  # aşağı kayan dikey imleç
+        m = self.margin
+        content_w = self.panel_width - 2 * m
+        texts: list = []  # (metin, org, px, renk_bgr, bold) — sonda tek geçişte çizilir
+        y = 46  # aşağı kayan metin taban çizgisi
 
         # Başlık.
-        cv2.putText(panel, "MOTIFIKA", (12, y), font, 0.9, (50, 220, 220), 2)
-        y += 30
+        texts.append(("MOTİFİKA", (m, y), 30, (50, 220, 220), True))
+        y += 42
 
         # Sıra sayacı.
-        cv2.putText(panel, f"Sira: {active_row} / {chart.rows}",
-                    (12, y), font, 0.7, (255, 255, 255), 2)
-        y += 25
+        texts.append((f"Sıra: {active_row} / {chart.rows}",
+                       (m, y), 22, (255, 255, 255), True))
+        y += 18
 
         # İlerleme oranı: bottom_up'ta active küçüldükçe artar, top_down'da tersi.
         progress = (
@@ -127,36 +170,36 @@ class UIRenderer:
         )
 
         # İlerleme çubuğu (arka plan + yeşil dolgu, kalınlık -1 = dolu).
-        bar_w = self.panel_width - 24
-        cv2.rectangle(panel, (12, y), (12 + bar_w, y + 14), (60, 60, 60), -1)
-        cv2.rectangle(panel, (12, y), (12 + int(bar_w * progress), y + 14),
+        cv2.rectangle(panel, (m, y), (m + content_w, y + 18), (60, 60, 60), -1)
+        cv2.rectangle(panel, (m, y), (m + int(content_w * progress), y + 18),
                       (50, 200, 50), -1)
-        y += 30
+        y += 18 + 40
 
         # Önceki / şimdiki / sonraki sıra şeritleri.
-        cv2.putText(panel, "Onceki sira", (12, y), font, 0.55, (160, 160, 160), 1)
-        y += 8
-        prev_strip = self.render_next_strip(chart, active_row, -1, direction, self.panel_width - 24)
-        # Slicing assign: paneldeki bölgeyi şeritle override et.
-        panel[y:y + prev_strip.shape[0], 12:12 + prev_strip.shape[1]] = prev_strip
-        y += prev_strip.shape[0] + 12
+        # Şeritler GEOMETRİK sırada dizilir: üstte küçük indeks (offset -1),
+        # ortada şimdiki, altta büyük indeks (offset +1) — chart yukarıdan aşağı.
+        # Etiketler dokuma yönüne göre değişir: top_down'da yukarı çıkan dokumada
+        # üstteki sıra "önceki" (bitmiş); bottom_up'ta üstteki sıra "sonraki".
+        prev_lbl = ("Önceki sıra", (160, 160, 160), False)
+        curr_lbl = ("Şimdiki sıra", (50, 220, 255), True)
+        next_lbl = ("Sonraki sıra", (255, 220, 180), False)
+        if direction == "bottom_up":
+            top_lbl, bot_lbl = next_lbl, prev_lbl
+        else:
+            top_lbl, bot_lbl = prev_lbl, next_lbl
 
-        cv2.putText(panel, "Simdiki sira", (12, y), font, 0.6, (50, 220, 255), 2)
-        y += 8
-        active_strip = self.render_next_strip(chart, active_row, 0, direction, self.panel_width - 24)
-        panel[y:y + active_strip.shape[0], 12:12 + active_strip.shape[1]] = active_strip
-        y += active_strip.shape[0] + 12
+        ordered = [(*top_lbl, -1), (*curr_lbl, 0), (*bot_lbl, +1)]
+        for label, color, bold, offset in ordered:
+            texts.append((label, (m, y), 19, color, bold))
+            strip_top = y + 12
+            strip = self.render_next_strip(chart, active_row, offset, content_w)
+            # Slicing assign: paneldeki bölgeyi şeritle override et.
+            panel[strip_top:strip_top + strip.shape[0], m:m + strip.shape[1]] = strip
+            y = strip_top + strip.shape[0] + 38
 
-        cv2.putText(panel, "Sonraki sira", (12, y), font, 0.6, (255, 220, 180), 1)
-        y += 8
-        next1 = self.render_next_strip(chart, active_row, 1, direction, self.panel_width - 24)
-        panel[y:y + next1.shape[0], 12:12 + next1.shape[1]] = next1
-        y += next1.shape[0] + 16
-
-        # Sonraki sıra renk özeti ("3 Kırmızı, 5 Siyah").
-        next_row_idx = (
-            active_row - 1 if direction == "bottom_up" else active_row + 1
-        )
+        # Sonraki (yapılacak) sıranın renk özeti ("3 Kırmızı, 5 Siyah").
+        # bottom_up'ta sonraki sıra yukarıda (active-1), top_down'da aşağıda (active+1).
+        next_row_idx = active_row - 1 if direction == "bottom_up" else active_row + 1
         if 0 <= next_row_idx < chart.rows:
             counts: dict[int, int] = {}
             for p_idx in chart.grid[next_row_idx]:
@@ -167,15 +210,15 @@ class UIRenderer:
             for p_idx, n in sorted(counts.items(), key=lambda kv: -kv[1]):
                 parts.append(f"{n} {_color_name(chart.palette_rgb[p_idx])}")
             # İlk 3 renk (paneli taşırmasın).
-            cv2.putText(panel, "Sonraki: " + ", ".join(parts[:3]),
-                        (12, y), font, 0.55, (180, 220, 255), 1)
-            y += 24
+            texts.append(("Sonraki: " + ", ".join(parts[:3]),
+                          (m, y), 16, (180, 220, 255), False))
+            y += 38
 
         # Renk uyarıları.
         if mismatches:
-            cv2.putText(panel, f"UYARI ({len(mismatches)} hata)",
-                        (12, y), font, 0.7, (60, 60, 240), 2)
-            y += 26
+            texts.append((f"UYARI ({len(mismatches)} hata)",
+                          (m, y), 22, (60, 60, 240), True))
+            y += 32
             # Kontrol aktif sırada değil bir önceki tamamlanmış sırada yapılıyor.
             row_label = check_row if check_row is not None else active_row
             # En çok 5 hata göster (ekrana sığsın).
@@ -183,18 +226,21 @@ class UIRenderer:
                 exp = _color_name(chart.palette_rgb[exp_idx])
                 obs = _color_name(chart.palette_rgb[obs_idx])
                 line = f"S{row_label}.{col}: {exp} yerine {obs}"
-                cv2.putText(panel, line, (12, y), font, 0.5, (120, 200, 255), 1)
-                y += 20
+                texts.append((line, (m, y), 16, (120, 200, 255), False))
+                y += 24
         else:
-            cv2.putText(panel, "Renk uyumu: OK",
-                        (12, y), font, 0.6, (120, 220, 120), 2)
+            texts.append(("Renk uyumu: OK", (m, y), 19, (120, 220, 120), True))
             y += 24
 
         # Klavye yardımı — panelin en altına sabit.
-        y_help = height - 50
-        for line in ["[yukari/asagi ok] sira", "[r] kalibrasyon", "[q] cikis"]:
-            cv2.putText(panel, line, (12, y_help), font, 0.5, (160, 160, 160), 1)
-            y_help += 18
+        y_help = height - 78
+        for line in ["[yukarı/aşağı ok] sıra", "[r] kalibrasyon",
+                     "[d] yön değiştir", "[q] çıkış"]:
+            texts.append((line, (m, y_help), 15, (160, 160, 160), False))
+            y_help += 22
+
+        # Tüm metinleri tek PIL geçişiyle çiz (Türkçe karakterler doğru görünsün).
+        _draw_texts(panel, texts)
         return panel
 
     def compose(self, camera_view: np.ndarray, panel: np.ndarray) -> np.ndarray:

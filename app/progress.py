@@ -92,8 +92,9 @@ class ProgressTracker:
         peak = float(self._score_ema.max())
 
         if peak < 0.05:
-            # Tüm skorlar çok düşük → boş kilim, başlangıç sırası.
-            auto_row = self.rows if self.direction == "bottom_up" else 0
+            # Tüm skorlar çok düşük → boş kilim. bottom_up'ta dokuma en ALT
+            # sıradan (rows-1) başlar ve yukarı çıkar; top_down'da en üstten (0).
+            auto_row = self.rows - 1 if self.direction == "bottom_up" else 0
         else:
             threshold = peak * self.thresh_ratio
             woven = self._score_ema >= threshold  # boolean dizi: dokunmuş mu
@@ -101,7 +102,7 @@ class ProgressTracker:
             if self.direction == "bottom_up":
                 # Dokunmuş bölge altta; aktif = en üstteki dokunmuşun bir üstü.
                 idxs = np.where(woven)[0]
-                auto_row = int(idxs.min()) - 1 if len(idxs) else self.rows
+                auto_row = int(idxs.min()) - 1 if len(idxs) else self.rows - 1
                 auto_row = max(-1, auto_row)
             else:
                 # Dokunmuş bölge üstte; aktif = ilk dokunmamış sıra.
