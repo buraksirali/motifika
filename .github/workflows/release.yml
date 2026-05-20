@@ -1,0 +1,106 @@
+name: build-release
+
+# MOTİFİKA'yı Raspberry Pi (64-bit / aarch64) için donmuş bir çalıştırılabilire
+# derler ve GitHub Release'e .tar.gz olarak yükler.
+#
+# Tetikleyiciler:
+#   - v* etiketi push'lanınca (ör. `git tag v1.0.0 && git push origin v1.0.0`)
+#   - elle (Actions sekmesi → Run workflow), istenirse bir etiket adı vererek.
+#
+# Neden ubuntu-22.04-arm: yerel aarch64 runner (QEMU yok, hızlı) ve glibc 2.35;
+# bu, Pi OS Bookworm'un glibc 2.36'sından eski olduğu için ikili Pi'de çalışır
+# (eski glibc'ye derle → yeni glibc'de çalışır). 24.04-arm'ın glibc 2.39'u
+# Bookworm'da "GLIBC_2.39 not found" verirdi.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release etiketi (elle çalıştırma için; ör. v0.1.0-test)'
+        required: false
+        default: 'dev'
+
+permissions:
+  contents: write   # Release oluşturup dosya yükleyebilmek için
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04-arm
+    env:
+      PKG: motifika-rpi-arm64
+      TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system build deps
+        run: |
+          sudo apt-get update
+          # python3-venv/pip: derleme ortamı. libgl1/libglib2.0-0 + xcb: PyInstaller
+          # analizinde `import cv2` çalışsın diye (opencv-python GUI sürümü bunlara bağlı).
+          # fonts-dejavu-core: panel Türkçe fontunu sürüme kopyalamak için.
+          sudo apt-get install -y \
+            python3 python3-venv python3-pip \
+            libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+            libxcb1 libxkbcommon-x11-0 \
+            fonts-dejavu-core
+
+      - name: Set up venv and install deps
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements-runtime.txt pyinstaller
+
+      - name: Build frozen executable (PyInstaller)
+        run: |
+          . .venv/bin/activate
+          pyinstaller --clean --noconfirm motifika.spec
+
+      - name: Assemble release package
+        run: |
+          set -euo pipefail
+          # onedir çıktısı: dist/motifika/ (motifika ikilisi + _internal/).
+          mv dist/motifika "$PKG"
+          # Çalışma-zamanı veri dosyaları ikilinin YANINA (yazılabilir; frozen modda
+          # main.py exe'nin dizinine chdir eder → bu göreli yollar bulunur).
+          cp -r assets "$PKG"/
+          cp eli_belinde.jpg hayat_agaci_ornek.png "$PKG"/
+          # Türkçe font'u paketle (Pi'de sistem fontu olmayabilir).
+          mkdir -p "$PKG"/fonts
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
+             /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf "$PKG"/fonts/
+          # Başlatıcı + README.
+          cp packaging/run.sh "$PKG"/run.sh
+          chmod +x "$PKG"/run.sh "$PKG"/motifika
+          cp packaging/RELEASE_README.md "$PKG"/README.md
+          tar -czf "$PKG.tar.gz" "$PKG"
+          ls -lh "$PKG.tar.gz"
+
+      - name: Smoke test (binary launches & imports cv2/numpy/PIL)
+        run: |
+          ./"$PKG"/motifika --help
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PKG }}
+          path: ${{ env.PKG }}.tar.gz
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: MOTİFİKA ${{ env.TAG }} (Raspberry Pi arm64)
+          body: |
+            Raspberry Pi (64-bit / aarch64) için donmuş MOTİFİKA — Python kurulumu gerekmez.
+            720p portrait (720×1280) düzen, USB kamera.
+
+            Kurulum/çalıştırma için arşivdeki `README.md`'ye bakın.
+          files: ${{ env.PKG }}.tar.gz
+          fail_on_unmatched_files: true

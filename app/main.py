@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 from pathlib import Path
 
@@ -47,6 +49,12 @@ COLOR_CHECK_EVERY_N = 5
 # Kamera görüntüsünün ekrandaki SABİT kutu boyutu (W, H). Kamera zoom yapsa veya
 # farklı çözünürlük gelse de kutu — ve sağdaki panelin ekran oranı — sabit kalır.
 CAMERA_VIEW_SIZE = (1280, 720)
+
+# Dikey (portrait) düzen: Raspberry Pi 720p portrait ekran = 720 geniş × 1280 yüksek.
+# Üstte 16:9 kamera kutusu (720×405), altta panel kalan yüksekliği (1280-405=875) doldurur.
+# compose() yatay yerine dikey birleştirir; panel tüm ekran genişliğinde (720) çizilir.
+PORTRAIT_SCREEN = (720, 1280)        # (W, H) — fiziksel ekran çözünürlüğü
+PORTRAIT_CAMERA_VIEW = (720, 405)    # (W, H) — üstteki kamera kutusu (16:9)
 
 # Yön tuşlarının waitKeyEx kodları — backend'e göre değişir (GTK / Qt / Windows).
 # waitKey()&0xFF bu kodları ASCII harflere çakıştırıyordu (Yukarı→'R' = kalibrasyon!),
@@ -119,7 +127,14 @@ def main():
     ap.add_argument("--no-color-check", action="store_true")
     ap.add_argument("--fullscreen", action="store_true",
                     help="MOTIFIKA penceresini tam ekran aç")
+    ap.add_argument("--portrait", action="store_true",
+                    help="720p portrait ekran düzeni (720×1280): kamera üstte, panel altta")
     args = ap.parse_args()
+
+    # Donmuş (PyInstaller) çalışırken çalışma dizinini exe'nin yanına al ki
+    # assets/, *.jpg/png ve calibration.json gibi GÖRELİ yollar bulunsun/yazılabilsin.
+    if getattr(sys, "frozen", False):
+        os.chdir(Path(sys.executable).resolve().parent)
 
     # Chart hazırla / yükle.
     chart_path = ensure_chart(args.motif, args.rows, args.cols, args.palette)
@@ -154,8 +169,18 @@ def main():
         # 4 çalışan: döngü boyunca yaşar, her karede metodları çağrılır.
         tracker = ProgressTracker(rows=chart.rows, cols=chart.cols, direction=direction)
         renderer = OverlayRenderer(chart, direction=direction)
-        ui = UIRenderer()
         backend = HSVBackend(chart.palette_rgb)
+
+        # Düzen seçimi: portrait → kamera üstte (720×405), panel altta tam genişlik (720).
+        # Yatay (varsayılan) → kamera solda, panel sağda (480 geniş).
+        if args.portrait:
+            camera_box = PORTRAIT_CAMERA_VIEW
+            panel_height = PORTRAIT_SCREEN[1] - PORTRAIT_CAMERA_VIEW[1]  # 1280-405=875
+            ui = UIRenderer(panel_width=PORTRAIT_SCREEN[0])
+        else:
+            camera_box = CAMERA_VIEW_SIZE
+            panel_height = None  # = kamera kutusunun yüksekliği (aşağıda doldurulur)
+            ui = UIRenderer()
 
         do_color_check = not args.no_color_check
 
@@ -191,15 +216,16 @@ def main():
             # ADIM 3: AR overlay. Sabit kutuya letterbox — kamera zoom/çözünürlük
             # değişse de birleşik görüntü ve panel oranı sabit kalır.
             ar_view = renderer.render(frame, H_chart_to_cam, active_row)
-            ar_view = _fit_to_box(ar_view, *CAMERA_VIEW_SIZE)
+            ar_view = _fit_to_box(ar_view, *camera_box)
 
-            # ADIM 4: sağ panel.
+            # ADIM 4: panel. Portrait'te sabit yükseklik (875), yatayda kamera kadar.
             check_row = last_completed_row(active_row, chart.rows, direction)
             panel = ui.render_panel(
                 chart, active_row, direction, last_mismatches,
-                height=ar_view.shape[0], check_row=check_row,
+                height=panel_height if panel_height is not None else ar_view.shape[0],
+                check_row=check_row,
             )
-            composed = ui.compose(ar_view, panel)
+            composed = ui.compose(ar_view, panel, vertical=args.portrait)
 
             # ADIM 5: FPS (EMA ile yumuşatılmış). max(...,1e-6): sıfıra bölme koruması.
             t_now = time.time()
