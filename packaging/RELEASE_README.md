@@ -2,7 +2,8 @@
 
 Bu arşiv MOTİFİKA'nın **donmuş** sürümüdür: Raspberry Pi'de **Python kurmaya gerek
 yoktur**. 64-bit Raspberry Pi OS (aarch64 / Pi 4B veya Pi 5) için derlenmiştir.
-Ekran düzeni **720p portrait** (720×1280): kamera üstte, kontrol paneli altta.
+Ekran düzeni varsayılan **720p yatay** (1280×720): kamera solda, kontrol paneli sağda.
+Dikey (720×1280) için: `./run.sh --portrait`.
 
 ## 1. Kurulum
 
@@ -59,10 +60,11 @@ Farklı motif/boyut:
 | `c` | renk kontrolü aç/kapat |
 | `q` / ESC | çıkış |
 
-## 5. Portrait ekran
+## 5. Ekran yönü
 
-Görüntü 720 geniş × 1280 yüksek üretilir. Fiziksel monitörünüz yataysa, Pi'de
-ekranı 90° döndürün (Raspberry Pi OS: *Screen Configuration* → *Orientation*,
+Varsayılan **yatay** modda görüntü 1280×720 üretilir ve 720p ekranı bire bir
+doldurur. **Dikey** mod (`./run.sh --portrait`) 720×1280 üretir; bu durumda Pi
+ekranını 90° döndürün (Raspberry Pi OS: *Screen Configuration* → *Orientation*,
 ya da `/boot/firmware/cmdline.txt` / `wlr-randr` ile).
 
 ## 6. Sorun giderme

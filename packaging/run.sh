@@ -30,7 +30,7 @@ add_if_missing() {
 HAS_IMAGE=0
 for a in "${ARGS[@]}"; do [[ "$a" == "--image" ]] && HAS_IMAGE=1; done
 [[ $HAS_IMAGE -eq 0 ]] && add_if_missing --camera --camera 0
-add_if_missing --portrait --portrait
+# Varsayılan düzen YATAY (1280×720). Dikey istersen: ./run.sh --portrait
 add_if_missing --fullscreen --fullscreen
 
 # Wayland oturumunda OpenCV'nin Qt highgui'si xcb ister; XWayland üzerinden çalışır.
