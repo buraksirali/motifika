@@ -46,9 +46,11 @@ MOTIFS = {
 # Her N karede 1 renk kontrolü. Kontrol pahalı; 5 = göze anlık görünür + CPU yormaz.
 COLOR_CHECK_EVERY_N = 5
 
-# Kamera görüntüsünün ekrandaki SABİT kutu boyutu (W, H). Kamera zoom yapsa veya
-# farklı çözünürlük gelse de kutu — ve sağdaki panelin ekran oranı — sabit kalır.
-CAMERA_VIEW_SIZE = (1280, 720)
+# Yatay (landscape) düzen: 720p ekran = 1280 geniş × 720 yüksek. Kamera solda
+# (880×720 kutuya 16:9 letterbox), panel sağda (400×720) → birleşik tam 1280×720,
+# ekranı bozulmadan doldurur. Kamera zoom/çözünürlük değişse de kutu sabit kalır.
+LANDSCAPE_SCREEN = (1280, 720)       # (W, H) — fiziksel ekran çözünürlüğü
+LANDSCAPE_PANEL_WIDTH = 400          # sağ panel genişliği (kamera kutusu = 1280-400)
 
 # Dikey (portrait) düzen: Raspberry Pi 720p portrait ekran = 720 geniş × 1280 yüksek.
 # Üstte 16:9 kamera kutusu (720×405), altta panel kalan yüksekliği (1280-405=875) doldurur.
@@ -178,9 +180,10 @@ def main():
             panel_height = PORTRAIT_SCREEN[1] - PORTRAIT_CAMERA_VIEW[1]  # 1280-405=875
             ui = UIRenderer(panel_width=PORTRAIT_SCREEN[0])
         else:
-            camera_box = CAMERA_VIEW_SIZE
-            panel_height = None  # = kamera kutusunun yüksekliği (aşağıda doldurulur)
-            ui = UIRenderer()
+            camera_box = (LANDSCAPE_SCREEN[0] - LANDSCAPE_PANEL_WIDTH,
+                          LANDSCAPE_SCREEN[1])              # (880, 720)
+            panel_height = LANDSCAPE_SCREEN[1]              # 720
+            ui = UIRenderer(panel_width=LANDSCAPE_PANEL_WIDTH)
 
         do_color_check = not args.no_color_check
 
@@ -280,9 +283,11 @@ def _make_window(win: str, fullscreen: bool) -> None:
     """MOTIFIKA penceresini oluştur; istenirse tam ekran moduna al.
 
     WINDOW_NORMAL açılır pencere verir; fullscreen istenince pencere özelliği
-    WINDOW_FULLSCREEN'e çekilir — letterbox sayesinde görüntü oranı korunur.
+    WINDOW_FULLSCREEN'e çekilir. WINDOW_KEEPRATIO: ekran oranı birleşik görüntüden
+    farklıysa görüntüyü esnetmeden (letterbox ile) gösterir — yatay düzen 1280×720
+    olduğundan 720p ekrana bire bir oturur; farklı çözünürlükte de bozulmaz.
     """
-    cv2.namedWindow(win, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
     if fullscreen:
         cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
