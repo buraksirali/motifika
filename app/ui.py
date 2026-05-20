@@ -10,6 +10,7 @@ Metin çizimi PIL ile yapılır: cv2.putText Hershey fontları Türkçe karakter
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -21,9 +22,24 @@ PANEL_MARGIN = 24             # panel iç kenar boşluğu (sol/sağ/üst)
 NEXT_ROW_CELL_PX = 26         # sağdaki şerit hücresi (overlay'den büyük, göz çeksin)
 
 # Türkçe karakter içeren DejaVu TTF — Hershey'in aksine ı/ş/ğ/ç/ö/ü destekler.
-_FONT_REGULAR = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-_FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+# Donmuş (PyInstaller) Pi'de sistem fontu olmayabilir → önce sürümle gelen fonts/
+# klasörüne, sonra repo köküne, en son sisteme bakarız.
+_FONT_REGULAR_NAME = "DejaVuSans.ttf"
+_FONT_BOLD_NAME = "DejaVuSans-Bold.ttf"
 _font_cache: dict[tuple[int, bool], "ImageFont.FreeTypeFont"] = {}
+
+
+def _find_font(filename: str) -> str:
+    """DejaVu TTF'i sırayla ara: data-root/fonts → repo_kökü/fonts → sistem."""
+    candidates = [
+        Path("fonts") / filename,                                       # data-root/fonts (frozen chdir'lı veya cwd)
+        Path(__file__).resolve().parent.parent / "fonts" / filename,    # repo_kökü/fonts (geliştirme)
+        Path("/usr/share/fonts/truetype/dejavu") / filename,            # sistem (apt fonts-dejavu-core)
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return str(candidates[-1])  # son çare: sistem yolu (yoksa _get_font load_default'a düşer)
 
 # Şu an KULLANILMIYOR; ileride kullanıcı paletinde Türkçe etiket için.
 TURKISH_COLOR_NAMES = {
@@ -39,7 +55,8 @@ def _get_font(px: int, bold: bool) -> "ImageFont.FreeTypeFont":
     font = _font_cache.get(key)
     if font is None:
         try:
-            font = ImageFont.truetype(_FONT_BOLD if bold else _FONT_REGULAR, px)
+            font = ImageFont.truetype(
+                _find_font(_FONT_BOLD_NAME if bold else _FONT_REGULAR_NAME), px)
         except OSError:
             font = ImageFont.load_default()  # TTF yoksa son çare
         _font_cache[key] = font
@@ -243,8 +260,20 @@ class UIRenderer:
         _draw_texts(panel, texts)
         return panel
 
-    def compose(self, camera_view: np.ndarray, panel: np.ndarray) -> np.ndarray:
-        """Kamera görüntüsü + paneli yan yana birleştir."""
+    def compose(self, camera_view: np.ndarray, panel: np.ndarray,
+                vertical: bool = False) -> np.ndarray:
+        """Kamera görüntüsü + paneli birleştir.
+
+        vertical=False (varsayılan, yatay): kamera solda, panel sağda (yükseklikleri eşitlenir).
+        vertical=True (portrait): kamera üstte, panel altta (genişlikleri eşitlenir).
+        """
+        if vertical:
+            w = camera_view.shape[1]
+            # Panel genişliği kameraya uymuyorsa uydur.
+            if panel.shape[1] != w:
+                panel = cv2.resize(panel, (w, panel.shape[0]))
+            return np.vstack([camera_view, panel])
+
         h = camera_view.shape[0]
         # Panel yüksekliği kameraya uymuyorsa uydur.
         if panel.shape[0] != h:

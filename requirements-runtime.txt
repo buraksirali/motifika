@@ -1,0 +1,7 @@
+# MOTİFİKA çalışma-zamanı (frozen) bağımlılıkları — yalnızca app/ içinde gerçekten
+# import edilenler. requirements.txt'deki pygame/albumentations/scikit-image YOLO
+# pivotundan kalmadır ve runtime'da kullanılmaz; donmuş ikiliyi küçük tutmak için
+# burada yer almaz. opencv-python (headless DEĞİL): cv2.imshow/namedWindow için GUI gerekir.
+opencv-python>=4.8
+numpy>=1.24
+Pillow>=10.0
