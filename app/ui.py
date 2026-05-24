@@ -66,18 +66,20 @@ def _get_font(px: int, bold: bool) -> "ImageFont.FreeTypeFont":
 def _draw_texts(img_bgr: np.ndarray, items: list) -> None:
     """Bir dizi metni tek PIL geçişiyle img üstüne çiz (UTF-8 / Türkçe güvenli).
 
-    items: [(metin, (x, y), px, renk_bgr, bold), ...]; y = metnin TABAN çizgisi.
-    Tek BGR↔RGB dönüşümü: her metin için ayrı dönüşüm yapmaktan çok daha hızlı.
+    items: [(metin, (x, y), px, renk_bgr, bold[, anchor]), ...].
+    İsteğe bağlı 6. eleman PIL hizası: "ls" (varsayılan, sol-taban), "mm" (ortala,
+    buton etiketleri için), "rs" (sağ-taban) gibi. Tek BGR↔RGB dönüşümü hızlıdır.
     """
     if not items:
         return
     pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
     draw = ImageDraw.Draw(pil)
-    for text, org, px, color_bgr, bold in items:
+    for item in items:
+        text, org, px, color_bgr, bold = item[:5]
+        anchor = item[5] if len(item) > 5 else "ls"
         font = _get_font(px, bold)
         rgb = (int(color_bgr[2]), int(color_bgr[1]), int(color_bgr[0]))
-        # anchor="ls": x sola, y taban çizgisine hizalı (cv2.putText org'una yakın).
-        draw.text(org, text, font=font, fill=rgb, anchor="ls")
+        draw.text(org, text, font=font, fill=rgb, anchor=anchor)
     img_bgr[:] = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
 
@@ -176,7 +178,7 @@ class UIRenderer:
 
         # Sıra sayacı.
         texts.append((f"Sıra: {active_row} / {chart.rows}",
-                       (m, y), 22, (255, 255, 255), True))
+                       (m, y), 26, (255, 255, 255), True))
         y += 18
 
         # İlerleme oranı: bottom_up'ta active küçüldükçe artar, top_down'da tersi.
@@ -207,7 +209,7 @@ class UIRenderer:
 
         ordered = [(*top_lbl, -1), (*curr_lbl, 0), (*bot_lbl, +1)]
         for label, color, bold, offset in ordered:
-            texts.append((label, (m, y), 19, color, bold))
+            texts.append((label, (m, y), 22, color, bold))
             strip_top = y + 12
             strip = self.render_next_strip(chart, active_row, offset, content_w)
             # Slicing assign: paneldeki bölgeyi şeritle override et.
@@ -228,7 +230,7 @@ class UIRenderer:
                 parts.append(f"{n} {_color_name(chart.palette_rgb[p_idx])}")
             # İlk 3 renk (paneli taşırmasın).
             texts.append(("Sonraki: " + ", ".join(parts[:3]),
-                          (m, y), 16, (180, 220, 255), False))
+                          (m, y), 18, (180, 220, 255), False))
             y += 38
 
         # Renk uyarıları.
@@ -243,19 +245,19 @@ class UIRenderer:
                 exp = _color_name(chart.palette_rgb[exp_idx])
                 obs = _color_name(chart.palette_rgb[obs_idx])
                 line = f"S{row_label}.{col}: {exp} yerine {obs}"
-                texts.append((line, (m, y), 16, (120, 200, 255), False))
-                y += 24
+                texts.append((line, (m, y), 18, (120, 200, 255), False))
+                y += 26
         else:
-            texts.append(("Renk uyumu: OK", (m, y), 19, (120, 220, 120), True))
+            texts.append(("Renk uyumu: OK", (m, y), 22, (120, 220, 120), True))
             y += 24
 
-        # Klavye yardımı — panelin en altına sabit.
-        y_help = height - 122
-        for line in ["[yukarı/aşağı ok] sıra", "[z/x] yakınlaş/uzaklaş",
-                     "[+/-] saydamlık", "[r] kalibrasyon", "[d] yön değiştir",
-                     "[q] çıkış"]:
-            texts.append((line, (m, y_help), 15, (160, 160, 160), False))
-            y_help += 22
+        # Klavye yardımı — panelin en altına sabit. (Dokunmatik için ekran butonları da var.)
+        y_help = height - 130
+        for line in ["Klavye:", "ok tuşları: sıra   z/x: zoom",
+                     "+/-: saydamlık   d: yön",
+                     "c: renk   r: kalibre   q: çıkış"]:
+            texts.append((line, (m, y_help), 16, (170, 170, 170), False))
+            y_help += 24
 
         # Tüm metinleri tek PIL geçişiyle çiz (Türkçe karakterler doğru görünsün).
         _draw_texts(panel, texts)

@@ -8,16 +8,14 @@ Kullanım:
     python -m app.main --motif hayat_agaci --rows 50 --cols 30 --image kilim.jpg
 
 Başlangıçta tıklanabilir bir ekranda motif seçilir (kalibrasyondan önce).
+Tüm kontroller hem KLAVYE hem de DOKUNMATIK BUTON ile yapılabilir (butonlar ekstra,
+klavye korunur). Butonlar kameranın altındaki 2 satırlık ızgaradadır.
 
-Klavye:
-    [yukarı ok] vurguyu yukarı taşı [aşağı ok]  vurguyu aşağı taşı
-    [z]       yakınlaş               [x]   uzaklaş
-    [+]/[-]   saydamlık (daha şeffaf / daha opak)
-    [r]       kalibrasyonu sıfırla  [d]   yön değiştir
-    [c]       renk kontrolü aç/kapat [q]/ESC  çıkış
-
-Ekran butonları (fare/dokunma): Saydamlik [-]/[+], Motif (kalibrasyonu
-koruyarak motif değiştir).
+Klavye (= buton karşılığı):
+    [yukarı/aşağı ok] sıra      [z]/[x] yakınlaş/uzaklaş
+    [+]/[-]  saydamlık          [d] yön değiştir
+    [c] renk kontrolü           [r] kalibrasyon
+    [q]/ESC çıkış               (Motif: yalnız buton)
 """
 from __future__ import annotations
 
@@ -89,6 +87,15 @@ TRANSP_MIN = 0.10
 TRANSP_MAX = 1.00
 TRANSP_STEP = 0.10
 TRANSP_DEFAULT = DEFAULT_TRANSPARENCY  # 0.60
+
+# Dokunmatik buton ızgarası (kameranın altında 2 satır). Her buton = bir komut;
+# aynı komutlar klavyeden de gelir (klavye kontrolleri korunur, butonlar EKSTRA).
+BUTTON_ROWS = [
+    [("row_up", "Sıra ▲"), ("row_down", "Sıra ▼"), ("zoom_in", "Yakınlaş"),
+     ("zoom_out", "Uzaklaş"), ("transp_up", "Saydam +"), ("transp_down", "Saydam −")],
+    [("direction", "Yön"), ("colorcheck", "Renk"), ("recalibrate", "Kalibre"),
+     ("motif", "Motif"), ("quit", "Çıkış")],
+]
 
 
 def ensure_chart(motif: str, rows: int, cols: int, palette: int) -> Path:
@@ -240,8 +247,8 @@ def run_calibration_flow(provider, rows, cols, frame_size, out_path: Path,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--motif", choices=list(MOTIFS.keys()), default="eli_belinde")
-    ap.add_argument("--rows", type=int, required=True)
-    ap.add_argument("--cols", type=int, required=True)
+    ap.add_argument("--rows", type=int, default=44)
+    ap.add_argument("--cols", type=int, default=38)
     ap.add_argument("--palette", type=int, default=4)
     ap.add_argument("--direction", choices=["bottom_up", "top_down"], default="bottom_up")
     ap.add_argument("--camera", type=int, default=0)
@@ -295,21 +302,17 @@ def main():
         and cal_data.get("orientation") == orientation
     )
 
-    # Tıklanabilir ekran kontrollerinin durumu. Mouse callback rect'lere göre günceller;
-    # ana döngü bu değerleri okur (saydamlık) / işler (motif değiştir).
-    ctrl = {"transparency": TRANSP_DEFAULT, "rects": {}, "switch_motif": False}
+    # Ekran (dokunmatik) kontrol durumu. Mouse callback tıklanan butonun KOMUTUNU
+    # ctrl["command"]'a yazar; klavye de aynı komutları yazar → tek işleyici (döngü
+    # başında) hepsini uygular. transparency/zoom canlı okunur.
+    ctrl = {"transparency": TRANSP_DEFAULT, "zoom": 1.0, "command": None, "rects": {}}
 
     def on_main_mouse(event, x, y, flags, _):
         if event != cv2.EVENT_LBUTTONDOWN:
             return
         for name, (x1, y1, x2, y2) in ctrl["rects"].items():
             if x1 <= x <= x2 and y1 <= y <= y2:
-                if name == "transp_plus":
-                    ctrl["transparency"] = min(round(ctrl["transparency"] + TRANSP_STEP, 2), TRANSP_MAX)
-                elif name == "transp_minus":
-                    ctrl["transparency"] = max(round(ctrl["transparency"] - TRANSP_STEP, 2), TRANSP_MIN)
-                elif name == "switch_motif":
-                    ctrl["switch_motif"] = True
+                ctrl["command"] = name
                 break
 
     # try/finally: ne olursa olsun (hata/çıkış) kamerayı kapat.
@@ -345,12 +348,16 @@ def main():
         last_mismatches: list = []  # son kontrol sonucu (ekrandan silmemek için cache)
         t_prev = time.time()
         fps_ema = 0.0
-        zoom = 1.0  # dijital zoom oranı (z/x ile değişir)
 
         while True:
-            # Ekrandaki "Motif" butonu → kalibrasyonu KORUYARAK motif değiştir.
-            if ctrl["switch_motif"]:
-                ctrl["switch_motif"] = False
+            # KOMUT İŞLEYİCİ: ekran butonları (mouse) ve klavye aynı ctrl["command"]'ı
+            # yazar → tek yerde uygulanır. Klavye kontrolleri korunur; butonlar ekstra.
+            cmd = ctrl["command"]
+            ctrl["command"] = None
+            if cmd == "quit":
+                break
+            elif cmd == "motif":
+                # Kalibrasyonu KORUYARAK motif değiştir.
                 cv2.destroyWindow(win)
                 try:
                     chosen = pick_motif_interactive(MOTIFS, MOTIF_LABELS, screen_size,
@@ -368,74 +375,7 @@ def main():
                     backend = HSVBackend(chart.palette_rgb)
                     last_mismatches = []
                 continue
-
-            frame = provider()
-            if frame is None:  # kamera kapandı / görsel sonu
-                break
-            frame_idx += 1
-            renderer.transparency = ctrl["transparency"]  # ekran [-]/[+] butonlarıyla canlı
-
-            # ADIM 1: otomatik atkı cephesi tespiti.
-            active_row = tracker.update(frame, H_cam_to_chart)
-
-            # ADIM 2: renk kontrolü (her N karede 1).
-            # Aktif sırada değil, bir önceki TAMAMLANMIŞ sırada yapılır
-            # (aktif sırada yarım örgüler hatalı sinyal verir).
-            if do_color_check and frame_idx % COLOR_CHECK_EVERY_N == 0:
-                check_row = last_completed_row(active_row, chart.rows, direction)
-                if check_row is not None:
-                    last_mismatches = check_active_row(
-                        frame, H_cam_to_chart, chart, check_row, backend,
-                    )
-                else:
-                    last_mismatches = []
-
-            # ADIM 3: AR overlay → dijital zoom → sabit kutuya letterbox. Zoom overlay'li
-            # görüntüye uygulanır (kamera+motif birlikte yakınlaşır); letterbox sayesinde
-            # birleşik görüntü ve panel oranı sabit kalır.
-            ar_view = renderer.render(frame, H_chart_to_cam, active_row)
-            ar_view = _zoom_view(ar_view, zoom)
-            ar_view = _fit_to_box(ar_view, *camera_box)
-
-            # ADIM 4: panel. Portrait'te sabit yükseklik (875), yatayda kamera kadar.
-            check_row = last_completed_row(active_row, chart.rows, direction)
-            panel = ui.render_panel(
-                chart, active_row, direction, last_mismatches,
-                height=panel_height if panel_height is not None else ar_view.shape[0],
-                check_row=check_row,
-            )
-            composed = ui.compose(ar_view, panel, vertical=args.portrait)
-
-            # ADIM 5: FPS (EMA ile yumuşatılmış). max(...,1e-6): sıfıra bölme koruması.
-            t_now = time.time()
-            inst_fps = 1.0 / max(t_now - t_prev, 1e-6)
-            fps_ema = 0.85 * fps_ema + 0.15 * inst_fps if fps_ema else inst_fps
-            t_prev = t_now
-            cv2.putText(composed, f"{fps_ema:.1f} FPS",
-                        (composed.shape[1] - 130, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            # Zoom göstergesi — yalnız yakınlaşmışken (geri bildirim).
-            if zoom > 1.0:
-                cv2.putText(composed, f"Zoom x{zoom:.1f}", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-
-            # ADIM 6: tıklanabilir kontroller (saydamlık [-]/[+] ve Motif) + ekrana bas.
-            ctrl["rects"] = _draw_controls(composed, camera_box, ctrl["transparency"])
-            cv2.imshow(win, composed)
-
-            # ADIM 7: klavye. waitKeyEx OS event loop'u da işler — olmazsa pencere
-            # donar. waitKeyEx (waitKey değil): yön tuşlarının tam kodunu verir.
-            raw = cv2.waitKeyEx(1)
-            key = raw & 0xFF  # ASCII tuşlar için düşük bayt
-            # Ok tuşu = chart'ta görsel yön: sıra 0 üstte, son sıra altta.
-            # Yukarı ok → vurgu chart'ta yukarı (sıra index -1), Aşağı ok → aşağı.
-            if raw in KEY_UP:
-                tracker.bump(-1)
-            elif raw in KEY_DOWN:
-                tracker.bump(+1)
-            elif key in (27, ord("q")):  # ESC / q → çıkış
-                break
-            elif key in (ord("r"), ord("R")):  # yeniden kalibrasyon
+            elif cmd == "recalibrate":
                 cv2.destroyWindow(win)
                 cal_data = run_calibration_flow(
                     provider, args.rows, args.cols, frame_size, CAL_PATH,
@@ -445,23 +385,106 @@ def main():
                 H_cam_to_chart = np.array(cal_data["H_cam_to_chart"], dtype=np.float64)
                 _make_window(win, args.fullscreen)
                 cv2.setMouseCallback(win, on_main_mouse)
-            elif key in (ord("d"), ord("D")):  # yön değiştir (toggle)
+                continue
+            elif cmd == "row_up":
+                tracker.bump(-1)
+            elif cmd == "row_down":
+                tracker.bump(+1)
+            elif cmd == "zoom_in":
+                ctrl["zoom"] = min(ctrl["zoom"] * ZOOM_STEP, ZOOM_MAX)
+            elif cmd == "zoom_out":
+                ctrl["zoom"] = max(ctrl["zoom"] / ZOOM_STEP, ZOOM_MIN)
+            elif cmd == "transp_up":
+                ctrl["transparency"] = min(round(ctrl["transparency"] + TRANSP_STEP, 2), TRANSP_MAX)
+            elif cmd == "transp_down":
+                ctrl["transparency"] = max(round(ctrl["transparency"] - TRANSP_STEP, 2), TRANSP_MIN)
+            elif cmd == "direction":
                 direction = "top_down" if direction == "bottom_up" else "bottom_up"
                 tracker.direction = direction
                 renderer.direction = direction
                 tracker.reset_manual()  # offset eski yöne göreydi
-            elif key in (ord("c"), ord("C")):  # renk kontrolü toggle
+            elif cmd == "colorcheck":
                 do_color_check = not do_color_check
                 if not do_color_check:
                     last_mismatches = []  # cached uyarıları temizle
-            elif key in (ord("+"), ord("=")):  # saydamlığı artır (daha şeffaf)
-                ctrl["transparency"] = min(round(ctrl["transparency"] + TRANSP_STEP, 2), TRANSP_MAX)
-            elif key in (ord("-"), ord("_")):  # saydamlığı azalt (daha opak)
-                ctrl["transparency"] = max(round(ctrl["transparency"] - TRANSP_STEP, 2), TRANSP_MIN)
-            elif key in (ord("z"), ord("Z")):  # yakınlaş
-                zoom = min(zoom * ZOOM_STEP, ZOOM_MAX)
-            elif key in (ord("x"), ord("X")):  # uzaklaş
-                zoom = max(zoom / ZOOM_STEP, ZOOM_MIN)
+
+            frame = provider()
+            if frame is None:  # kamera kapandı / görsel sonu
+                break
+            frame_idx += 1
+            renderer.transparency = ctrl["transparency"]  # canlı saydamlık
+
+            # ADIM 1: otomatik atkı cephesi tespiti.
+            active_row = tracker.update(frame, H_cam_to_chart)
+
+            # ADIM 2: renk kontrolü (her N karede 1) — bir önceki TAMAMLANMIŞ sırada.
+            if do_color_check and frame_idx % COLOR_CHECK_EVERY_N == 0:
+                check_row = last_completed_row(active_row, chart.rows, direction)
+                if check_row is not None:
+                    last_mismatches = check_active_row(
+                        frame, H_cam_to_chart, chart, check_row, backend,
+                    )
+                else:
+                    last_mismatches = []
+
+            # ADIM 3: AR overlay → dijital zoom → letterbox.
+            ar_view = renderer.render(frame, H_chart_to_cam, active_row)
+            ar_view = _zoom_view(ar_view, ctrl["zoom"])
+            ar_view = _fit_to_box(ar_view, *camera_box)
+
+            # ADIM 4: panel.
+            check_row = last_completed_row(active_row, chart.rows, direction)
+            panel = ui.render_panel(
+                chart, active_row, direction, last_mismatches,
+                height=panel_height if panel_height is not None else ar_view.shape[0],
+                check_row=check_row,
+            )
+            composed = ui.compose(ar_view, panel, vertical=args.portrait)
+
+            # ADIM 5: FPS (EMA ile yumuşatılmış).
+            t_now = time.time()
+            inst_fps = 1.0 / max(t_now - t_prev, 1e-6)
+            fps_ema = 0.85 * fps_ema + 0.15 * inst_fps if fps_ema else inst_fps
+            t_prev = t_now
+
+            # ADIM 6: durum satırı + FPS + dokunmatik butonlar → TEK PIL geçişi (net TTF).
+            status = f"Saydamlık %{int(round(ctrl['transparency'] * 100))}"
+            if ctrl["zoom"] > 1.0:
+                status += f"    Zoom x{ctrl['zoom']:.1f}"
+            status += f"    Renk: {'Açık' if do_color_check else 'Kapalı'}"
+            overlay_texts = [
+                (status, (12, 32), 24, (60, 230, 230), True),
+                (f"{fps_ema:.0f} FPS", (composed.shape[1] - 12, 32), 22, (60, 230, 230), True, "rs"),
+            ]
+            rects, btn_texts = _draw_button_bar(composed, camera_box, do_color_check)
+            ctrl["rects"] = rects
+            _draw_texts(composed, overlay_texts + btn_texts)
+            cv2.imshow(win, composed)
+
+            # ADIM 7: klavye → komut (KORUNUR; butonlar ekstra). Komut bir sonraki turda
+            # işlenir (göze çarpmaz). waitKeyEx yön tuşlarının tam kodunu verir.
+            raw = cv2.waitKeyEx(1)
+            key = raw & 0xFF
+            if raw in KEY_UP:
+                ctrl["command"] = "row_up"
+            elif raw in KEY_DOWN:
+                ctrl["command"] = "row_down"
+            elif key in (27, ord("q")):
+                ctrl["command"] = "quit"
+            elif key in (ord("r"), ord("R")):
+                ctrl["command"] = "recalibrate"
+            elif key in (ord("d"), ord("D")):
+                ctrl["command"] = "direction"
+            elif key in (ord("c"), ord("C")):
+                ctrl["command"] = "colorcheck"
+            elif key in (ord("+"), ord("=")):
+                ctrl["command"] = "transp_up"
+            elif key in (ord("-"), ord("_")):
+                ctrl["command"] = "transp_down"
+            elif key in (ord("z"), ord("Z")):
+                ctrl["command"] = "zoom_in"
+            elif key in (ord("x"), ord("X")):
+                ctrl["command"] = "zoom_out"
     finally:
         # cap None olabilir (sabit görsel modu).
         if cap is not None:
@@ -518,47 +541,33 @@ def _zoom_view(img: np.ndarray, zoom: float) -> np.ndarray:
     return cv2.resize(crop, (w, h), interpolation=cv2.INTER_LINEAR)
 
 
-def _btn(img: np.ndarray, rect: tuple, sym: str) -> None:
-    """Tek karakterli buton çiz (dolgu + çerçeve + ortalanmış sembol)."""
-    x1, y1, x2, y2 = rect
-    cv2.rectangle(img, (x1, y1), (x2, y2), (60, 60, 60), -1)
-    cv2.rectangle(img, (x1, y1), (x2, y2), (210, 210, 210), 1)
-    cv2.putText(img, sym, (x1 + 13, y2 - 12), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2)
+def _draw_button_bar(composed: np.ndarray, camera_box, color_check_on: bool) -> tuple:
+    """Kamera görüntüsünün altına dokunmatik buton ızgarası çiz.
 
-
-def _draw_controls(composed: np.ndarray, camera_box, transparency: float) -> dict:
-    """Kamera görüntüsünün altına tıklanabilir kontroller çiz, rect sözlüğü döndür.
-
-    Sol alt: Saydamlik [-] %xx [+]. Sağ alt: Motif (değiştir). Rect'ler composed
-    (birleşik görüntü) koordinatlarında — kamera kutusu composed'da (0,0)'dan başlar,
-    bu yüzden mouse callback ile birebir eşleşir.
+    Her butona klavyedeki bir komutun karşılığı (BUTTON_ROWS). Rect'ler composed
+    koordinatlarında (kamera kutusu composed'da (0,0)'dan başlar) → mouse callback
+    ile birebir eşleşir. Dönüş: (rects {komut: rect}, texts [PIL etiketleri]).
+    Etiketler tek PIL geçişinde çizilsin diye burada değil, çağırıcıda basılır.
     """
     cam_w, cam_h = camera_box
-    bh = bw = 46
-    by = cam_h - bh - 12
-    rects = {}
-
-    # Saydamlık: [-] etiket [+]
-    x = 12
-    rects["transp_minus"] = (x, by, x + bw, by + bh)
-    _btn(composed, rects["transp_minus"], "-")
-    label_x, label_w = x + bw + 8, 160
-    cv2.rectangle(composed, (label_x, by), (label_x + label_w, by + bh), (35, 35, 35), -1)
-    cv2.rectangle(composed, (label_x, by), (label_x + label_w, by + bh), (90, 90, 90), 1)
-    cv2.putText(composed, f"Saydamlik %{int(round(transparency * 100))}",
-                (label_x + 10, by + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-    plus_x = label_x + label_w + 8
-    rects["transp_plus"] = (plus_x, by, plus_x + bw, by + bh)
-    _btn(composed, rects["transp_plus"], "+")
-
-    # Motif değiştir (sağ alt).
-    mw = 130
-    mx = cam_w - 12 - mw
-    rects["switch_motif"] = (mx, by, mx + mw, by + bh)
-    cv2.rectangle(composed, (mx, by), (mx + mw, by + bh), (60, 60, 60), -1)
-    cv2.rectangle(composed, (mx, by), (mx + mw, by + bh), (210, 210, 210), 1)
-    cv2.putText(composed, "Motif", (mx + 30, by + 31), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    return rects
+    bh, gap = 50, 8
+    n_rows = len(BUTTON_ROWS)
+    y0 = cam_h - (bh * n_rows + gap * (n_rows + 1))
+    rects: dict = {}
+    texts: list = []
+    for ri, row in enumerate(BUTTON_ROWS):
+        n = len(row)
+        bw = (cam_w - gap * (n + 1)) // n
+        y1 = y0 + gap + ri * (bh + gap)
+        for ci, (cmd, label) in enumerate(row):
+            x1 = gap + ci * (bw + gap)
+            x2, y2 = x1 + bw, y1 + bh
+            rects[cmd] = (x1, y1, x2, y2)
+            on = cmd == "colorcheck" and color_check_on  # aktif mod → yeşil
+            cv2.rectangle(composed, (x1, y1), (x2, y2), (60, 95, 60) if on else (55, 55, 55), -1)
+            cv2.rectangle(composed, (x1, y1), (x2, y2), (210, 210, 210), 1)
+            texts.append((label, (x1 + bw // 2, y1 + bh // 2), 22, (255, 255, 255), True, "mm"))
+    return rects, texts
 
 
 if __name__ == "__main__":
