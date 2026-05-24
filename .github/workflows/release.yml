@@ -69,7 +69,21 @@ jobs:
           # Çalışma-zamanı veri dosyaları ikilinin YANINA (yazılabilir; frozen modda
           # main.py exe'nin dizinine chdir eder → bu göreli yollar bulunur).
           cp -r assets "$PKG"/
-          cp eli_belinde.jpg hayat_agaci_ornek.png "$PKG"/
+          # Motif kaynak görsellerini app/main.py'deki MOTIFS kataloğundan oku ve
+          # kopyala → yeni motif eklenince bu adımı elle güncellemeye gerek kalmaz.
+          # (Chart/preview zaten assets/ ile geldi; kaynak görsel regenerate içindir,
+          # eksikse uyarı verir ama derlemeyi kırmaz.)
+          python3 - <<'PY'
+          import ast, os, pathlib, shutil
+          pkg = os.environ["PKG"]
+          tree = ast.parse(pathlib.Path("app/main.py").read_text())
+          node = next(n for n in ast.walk(tree) if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "MOTIFS")
+          srcs = [v.args[0].value for v in node.value.values if isinstance(v, ast.Call) and v.args]
+          print("MOTIFS kaynaklari:", srcs)
+          for s in srcs:
+              if pathlib.Path(s).is_file(): shutil.copy(s, pkg); print("eklendi:", s)
+              else: print("UYARI: kaynak yok, atlandi (chart.json yeterli):", s)
+          PY
           # Türkçe font'u paketle (Pi'de sistem fontu olmayabilir).
           mkdir -p "$PKG"/fonts
           cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
