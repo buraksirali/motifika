@@ -18,10 +18,12 @@ import numpy as np
 # Bir hücrenin chart-piksel boyutu. Diğer modüllerdeki CELL_PX'lerle senkron olmalı.
 CELL_PX = 16
 
-# Alpha: 0.0 = şeffaf (kamera görünür), 1.0 = opak (chart görünür).
-DONE_ALPHA = 0.20    # yapılmış sıralar — soluk
-TODO_ALPHA = 0.55    # yapılacaklar — orta
-ACTIVE_ALPHA = 0.65  # aktif sıra — en vurgulu
+# Saydamlık (transparency): kullanıcı 0.10–1.00 arası ayarlar; YÜKSEK = daha şeffaf.
+# Temel opaklık = 1 - transparency. Üç bölge bu temelin oranlarıyla çizilir, böylece
+# kullanıcı tek değerle tüm motifin görünürlüğünü ayarlar (yapılmış/aktif farkı korunur).
+DEFAULT_TRANSPARENCY = 0.60   # %60 → temel opaklık 0.40
+DONE_RATIO = 0.36             # yapılmış sıralar — temelin ~%36'sı (soluk)
+ACTIVE_RATIO = 1.18           # aktif sıra — temelin ~%118'i (en vurgulu, 1.0'da sınırlı)
 
 
 @dataclass
@@ -57,6 +59,7 @@ class OverlayRenderer:
     chart: Chart
     cell_px: int = CELL_PX
     direction: str = "bottom_up"
+    transparency: float = DEFAULT_TRANSPARENCY   # 0.10–1.00; yüksek = daha şeffaf
     _chart_layer: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
@@ -82,10 +85,19 @@ class OverlayRenderer:
         return layer
 
     def _alpha_mask(self, active_row: int) -> np.ndarray:
-        """Her chart pikseline alpha (0..1) ata. Tek kanal float32 harita."""
+        """Her chart pikseline alpha (0..1) ata. Tek kanal float32 harita.
+
+        self.transparency'den türetilir: temel opaklık = 1 - transparency.
+        yapılmış sıralar soluk (DONE_RATIO), aktif sıra vurgulu (ACTIVE_RATIO).
+        """
         cell = self.cell_px
         h, w = self.chart.rows * cell, self.chart.cols * cell
         alpha = np.zeros((h, w), dtype=np.float32)
+
+        base = max(0.0, 1.0 - self.transparency)   # todo/temel opaklık
+        done_a = base * DONE_RATIO
+        active_a = min(base * ACTIVE_RATIO, 1.0)
+        todo_a = base
 
         for r in range(self.chart.rows):
             if self.direction == "bottom_up":
@@ -95,11 +107,11 @@ class OverlayRenderer:
                 # top_down: aktif sıranın üstü = dokunmuş.
                 done = r < active_row
             if r == active_row:
-                a = ACTIVE_ALPHA
+                a = active_a
             elif done:
-                a = DONE_ALPHA
+                a = done_a
             else:
-                a = TODO_ALPHA
+                a = todo_a
             alpha[r * cell:(r + 1) * cell] = a
         return alpha
 
