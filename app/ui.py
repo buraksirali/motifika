@@ -250,9 +250,9 @@ class UIRenderer:
             y += 24
 
         # Klavye yardımı — panelin en altına sabit.
-        y_help = height - 78
-        for line in ["[yukarı/aşağı ok] sıra", "[r] kalibrasyon",
-                     "[d] yön değiştir", "[q] çıkış"]:
+        y_help = height - 100
+        for line in ["[yukarı/aşağı ok] sıra", "[z/x] yakınlaş/uzaklaş",
+                     "[r] kalibrasyon", "[d] yön değiştir", "[q] çıkış"]:
             texts.append((line, (m, y_help), 15, (160, 160, 160), False))
             y_help += 22
 

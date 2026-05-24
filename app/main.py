@@ -9,6 +9,7 @@ Kullanım:
 
 Klavye:
     [yukarı ok] vurguyu yukarı taşı [aşağı ok]  vurguyu aşağı taşı
+    [z]       yakınlaş               [x]   uzaklaş
     [r]       kalibrasyonu sıfırla  [d]   yön değiştir
     [c]       renk kontrolü aç/kapat [q]/ESC  çıkış
 """
@@ -28,6 +29,7 @@ from app.calibration import (
     DEFAULT_PATH as CAL_PATH,
     collect_corners_interactive,
     load_calibration,
+    orient_frame,
     save_calibration,
 )
 from app.color_check import HSVBackend, check_active_row, last_completed_row
@@ -64,6 +66,12 @@ PORTRAIT_CAMERA_VIEW = (720, 405)    # (W, H) — üstteki kamera kutusu (16:9)
 KEY_UP = {65362, 16777235, 2490368, 63232}
 KEY_DOWN = {65364, 16777237, 2621440, 63233}
 
+# Dijital zoom (z=yakınlaş, x=uzaklaş). Çarpımsal adım → her basışta yumuşak oran.
+# 1.0 = tam görüntü (en uzak), ZOOM_MAX = en yakın. Optik değil, AR görüntüsü kırpılır.
+ZOOM_STEP = 1.1
+ZOOM_MIN = 1.0
+ZOOM_MAX = 6.0
+
 
 def ensure_chart(motif: str, rows: int, cols: int, palette: int) -> Path:
     """assets/<motif>_chart.json yoksa motif kaynağından üret (varsa cache)."""
@@ -79,13 +87,20 @@ def ensure_chart(motif: str, rows: int, cols: int, palette: int) -> Path:
     return chart_path
 
 
-def open_camera_or_image(args, frame_size_hint=(1280, 720)):
-    """Kamera veya sabit görüntü için (frame_provider, cap, boyut) döndür."""
+def open_camera_or_image(args, frame_size_hint=(1280, 720), flip: bool = True):
+    """Kamera veya sabit görüntü için (frame_provider, cap, boyut) döndür.
+
+    flip=True ise her kare orient_frame ile kullanıcı bakışına çevrilir
+    (180° döndür + aynala). Çeviri KAYNAKTA yapılır → tracker, renk kontrolü,
+    overlay ve ekran hep aynı yönde görür; kalibrasyon da bu yönde toplanır.
+    """
     # Sabit görsel modu (test). provider her çağrıda temiz kopya verir.
     if args.image:
         img = cv2.imread(str(args.image))
         if img is None:
             raise FileNotFoundError(args.image)
+        if flip:
+            img = orient_frame(img)
         return (lambda: img.copy()), None, (img.shape[1], img.shape[0])
 
     # Canlı kamera modu.
@@ -99,7 +114,9 @@ def open_camera_or_image(args, frame_size_hint=(1280, 720)):
 
     def provider():
         ok, frame = cap.read()
-        return frame if ok else None
+        if not ok:
+            return None
+        return orient_frame(frame) if flip else frame
 
     real_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     real_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -107,12 +124,16 @@ def open_camera_or_image(args, frame_size_hint=(1280, 720)):
 
 
 def run_calibration_flow(provider, rows, cols, frame_size, out_path: Path,
-                         fullscreen: bool = False) -> dict:
-    """4 köşe topla → homography hesapla → JSON'a kaydet."""
+                         fullscreen: bool = False, flip: bool = True) -> dict:
+    """4 köşe topla → homography hesapla → JSON'a kaydet.
+
+    flip, JSON'a yazılır; provider zaten çevrilmiş kare verdiği için köşeler
+    kullanıcı bakışında toplanır — homography de bu yönle tutarlı olur.
+    """
     corners, fs = collect_corners_interactive(provider, rows, cols, fullscreen)
     if fs is None:  # provider hiç frame vermediyse hint kullan
         fs = frame_size
-    return save_calibration(out_path, rows, cols, corners, fs)
+    return save_calibration(out_path, rows, cols, corners, fs, flip=flip)
 
 
 def main():
@@ -131,7 +152,15 @@ def main():
                     help="MOTIFIKA penceresini tam ekran aç")
     ap.add_argument("--portrait", action="store_true",
                     help="720p portrait ekran düzeni (720×1280): kamera üstte, panel altta")
+    ap.add_argument("--no-flip", action="store_true",
+                    help="kullanıcı bakışı dönüşümünü kapat (varsayılan: kamerayı 180° döndür + "
+                         "aynala VE motifi yatay aynala)")
     args = ap.parse_args()
+
+    # Varsayılan: her şeyi kullanıcı bakışına getir. İki parça var:
+    #  (1) kamera karesi orient_frame ile çevrilir (180° + aynala → dikey flip),
+    #  (2) chart motifi yatay aynalanır (aşağıda) ki overlay fiziksel parçaya otursun.
+    flip = not args.no_flip
 
     # Donmuş (PyInstaller) çalışırken çalışma dizinini exe'nin yanına al ki
     # assets/, *.jpg/png ve calibration.json gibi GÖRELİ yollar bulunsun/yazılabilsin.
@@ -141,18 +170,26 @@ def main():
     # Chart hazırla / yükle.
     chart_path = ensure_chart(args.motif, args.rows, args.cols, args.palette)
     chart = Chart.load(chart_path)
+    # Kamera kullanıcı bakışına çevrilince motif de fiziksel parçayla eşleşsin diye
+    # chart'ı YATAY aynala (sütunları ters çevir). Tek noktada yapılır → overlay,
+    # renk kontrolü ve panel hepsi aynı yönü görür (ProgressTracker grid kullanmaz,
+    # etkilenmez). Cache'lenen JSON canonical kalır; aynalama yalnız runtime'da.
+    if flip:
+        chart.grid = np.ascontiguousarray(np.fliplr(chart.grid))
     print(f"chart yüklendi: {chart_path} ({chart.rows}×{chart.cols}, {len(chart.palette_rgb)} renk)")
 
-    provider, cap, frame_size = open_camera_or_image(args)
+    provider, cap, frame_size = open_camera_or_image(args, flip=flip)
 
-    # Eski kalibrasyon hâlâ uyuyor mu? rows/cols/frame_size aynıysa kullan.
+    # Eski kalibrasyon hâlâ uyuyor mu? rows/cols/frame_size + yön (flip) aynıysa kullan.
     # tuple(): JSON'dan list gelir, frame_size tuple — eşitlik için aynı tip olmalı.
+    # flip farklıysa köşeler yanlış yöndeki karede tıklanmış demektir → yeniden kalibre.
     cal_data = load_calibration(CAL_PATH)
     cal_match = (
         cal_data is not None
         and cal_data.get("rows") == args.rows
         and cal_data.get("cols") == args.cols
         and tuple(cal_data.get("frame_size", [])) == frame_size
+        and bool(cal_data.get("flip", False)) == flip
     )
 
     # try/finally: ne olursa olsun (hata/çıkış) kamerayı kapat.
@@ -160,7 +197,7 @@ def main():
         if args.recalibrate or not cal_match:
             print("kalibrasyon başlatılıyor: 4 köşeye SOL ÜST → SAĞ ÜST → SAĞ ALT → SOL ALT sırasıyla tıkla")
             cal_data = run_calibration_flow(provider, args.rows, args.cols, frame_size,
-                                            CAL_PATH, args.fullscreen)
+                                            CAL_PATH, args.fullscreen, flip=flip)
             print(f"kalibrasyon kaydedildi: {CAL_PATH}")
 
         H_chart_to_cam = np.array(cal_data["H_chart_to_cam"], dtype=np.float64)
@@ -194,6 +231,7 @@ def main():
         last_mismatches: list = []  # son kontrol sonucu (ekrandan silmemek için cache)
         t_prev = time.time()
         fps_ema = 0.0
+        zoom = 1.0  # dijital zoom oranı (z/x ile değişir)
 
         while True:
             frame = provider()
@@ -216,9 +254,11 @@ def main():
                 else:
                     last_mismatches = []
 
-            # ADIM 3: AR overlay. Sabit kutuya letterbox — kamera zoom/çözünürlük
-            # değişse de birleşik görüntü ve panel oranı sabit kalır.
+            # ADIM 3: AR overlay → dijital zoom → sabit kutuya letterbox. Zoom overlay'li
+            # görüntüye uygulanır (kamera+motif birlikte yakınlaşır); letterbox sayesinde
+            # birleşik görüntü ve panel oranı sabit kalır.
             ar_view = renderer.render(frame, H_chart_to_cam, active_row)
+            ar_view = _zoom_view(ar_view, zoom)
             ar_view = _fit_to_box(ar_view, *camera_box)
 
             # ADIM 4: panel. Portrait'te sabit yükseklik (875), yatayda kamera kadar.
@@ -238,6 +278,10 @@ def main():
             cv2.putText(composed, f"{fps_ema:.1f} FPS",
                         (composed.shape[1] - 130, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            # Zoom göstergesi — yalnız yakınlaşmışken (geri bildirim).
+            if zoom > 1.0:
+                cv2.putText(composed, f"Zoom x{zoom:.1f}", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
             # ADIM 6: ekrana bas.
             cv2.imshow(win, composed)
@@ -272,6 +316,10 @@ def main():
                 do_color_check = not do_color_check
                 if not do_color_check:
                     last_mismatches = []  # cached uyarıları temizle
+            elif key in (ord("z"), ord("Z")):  # yakınlaş
+                zoom = min(zoom * ZOOM_STEP, ZOOM_MAX)
+            elif key in (ord("x"), ord("X")):  # uzaklaş
+                zoom = max(zoom / ZOOM_STEP, ZOOM_MIN)
     finally:
         # cap None olabilir (sabit görsel modu).
         if cap is not None:
@@ -310,6 +358,22 @@ def _fit_to_box(img: np.ndarray, box_w: int, box_h: int) -> np.ndarray:
     y0 = (box_h - new_h) // 2
     canvas[y0:y0 + new_h, x0:x0 + new_w] = resized
     return canvas
+
+
+def _zoom_view(img: np.ndarray, zoom: float) -> np.ndarray:
+    """Görüntünün ORTASINA dijital zoom uygula.
+
+    zoom<=1.0 → değişmez (tam görüntü). zoom>1.0 → merkezdeki 1/zoom'luk bölgeyi
+    kırpıp aynı boyuta büyüt. Overlay zaten ar_view'e işlendiğinden kamera ve motif
+    birlikte yakınlaşır; homography'ye dokunmaya gerek yok.
+    """
+    if zoom <= 1.0:
+        return img
+    h, w = img.shape[:2]
+    cw, ch = max(1, round(w / zoom)), max(1, round(h / zoom))
+    x0, y0 = (w - cw) // 2, (h - ch) // 2
+    crop = img[y0:y0 + ch, x0:x0 + cw]
+    return cv2.resize(crop, (w, h), interpolation=cv2.INTER_LINEAR)
 
 
 if __name__ == "__main__":
