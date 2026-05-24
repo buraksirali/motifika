@@ -37,14 +37,14 @@ DEFAULT_PATH = Path("assets/calibration.json")
 
 
 def orient_frame(frame: np.ndarray) -> np.ndarray:
-    """Kamera karesini kullanıcı bakışına çevir: 180° döndür + yatay aynala.
+    """Kamera karesini kullanıcı bakışına çevir: 180° döndür (aynalama YOK).
 
-    Kamera projeyi ters yönden (karşıdan / baş aşağı) gördüğünden, görüntü
-    kullanıcının kendi gözünden bakıyormuş gibi görünsün diye çeviriyoruz.
-    Boyut değişmez (W×H aynı kalır), bu yüzden kalibrasyon frame_size'ını bozmaz.
-    Kaynakta uygulanır → tüm hat (tracker, renk kontrolü, overlay) aynı yöndedir.
+    Kamera projeyi baş aşağı gördüğünden 180° döndürüyoruz. Aynalama bilinçli
+    olarak kaldırıldı (kullanıcı isteği). Boyut değişmez (W×H aynı kalır), bu
+    yüzden kalibrasyon frame_size'ını bozmaz. Kaynakta uygulanır → tüm hat
+    (tracker, renk kontrolü, overlay) aynı yöndedir.
     """
-    return cv2.flip(cv2.rotate(frame, cv2.ROTATE_180), 1)
+    return cv2.rotate(frame, cv2.ROTATE_180)
 
 
 def chart_corners(rows: int, cols: int) -> np.ndarray:
@@ -168,20 +168,21 @@ def save_calibration(
     cols: int,
     camera_corners: np.ndarray,
     frame_size: tuple[int, int],
-    flip: bool = False,
+    orientation: str = "none",
 ) -> dict:
     """Homography'yi hesaplayıp JSON'a kaydet, veriyi geri döndür.
 
-    flip: kalibrasyon, kareler orient_frame ile çevrilmişken mi yapıldı?
-    main.py bu bayrağı cal_match'te karşılaştırır — yön değişince eski
-    kalibrasyonu (köşeler çevrilmemiş karede tıklanmıştı) otomatik geçersiz kılar.
+    orientation: köşeler hangi kare yönünde tıklandı? "rot180" (orient_frame ile
+    180° döndürülmüş) ya da "none" (ham). main.py cal_match'te karşılaştırır —
+    yön değişince eski kalibrasyon otomatik geçersiz olur. (Eski sürümler "flip"
+    bool yazıyordu; o alan artık yok, eski dosyalar otomatik yeniden kalibre olur.)
     """
     H_chart_to_cam, H_cam_to_chart = compute_homography(camera_corners, rows, cols)
 
     data = {
         "rows": rows,
         "cols": cols,
-        "flip": flip,
+        "orientation": orientation,
         "camera_corners": camera_corners.tolist(),
         "frame_size": list(frame_size),
         "H_chart_to_cam": H_chart_to_cam.tolist(),
@@ -207,9 +208,10 @@ def main():
     ap.add_argument("--image", type=Path, default=None, help="canli kamera yerine sabit goruntu")
     ap.add_argument("--out", type=Path, default=DEFAULT_PATH)
     ap.add_argument("--no-flip", action="store_true",
-                    help="kamera görüntüsünü çevirme (varsayılan: 180° döndür + aynala)")
+                    help="kamera görüntüsünü çevirme (varsayılan: 180° döndür)")
     args = ap.parse_args()
-    flip = not args.no_flip  # main.py ile aynı varsayılan: kullanıcı bakışına çevir
+    flip = not args.no_flip  # main.py ile aynı varsayılan: 180° döndür
+    orientation = "rot180" if flip else "none"
 
     if args.image is not None:
         img = cv2.imread(str(args.image))
@@ -236,7 +238,8 @@ def main():
         if args.image is None:
             cap.release()
 
-    data = save_calibration(args.out, args.rows, args.cols, corners, frame_size, flip=flip)
+    data = save_calibration(args.out, args.rows, args.cols, corners, frame_size,
+                            orientation=orientation)
     print(f"kalibrasyon kaydedildi: {args.out}")
     print(f"köşeler (kamera px): {data['camera_corners']}")
 
