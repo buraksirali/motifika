@@ -16,6 +16,12 @@ Klavye (= buton karşılığı):
     [+]/[-]  saydamlık          [d] yön değiştir
     [c] renk kontrolü           [r] kalibrasyon
     [q]/ESC çıkış               (Motif: yalnız buton)
+    [p] podcast oynat/duraklat  [sol/sağ ok] 30 sn geri/ileri
+    [,]/[.] podcast ses −/+
+
+Kalibrasyon biter bitmez seçili motifin podcast'i çalmaya başlar (eli_belinde ve
+hayat_agaci ayrı dosyalar). Motif değişince yeni podcast kaldığı yerden sürer.
+Ses cihazı yoksa podcast sessizce devre dışı kalır; --no-audio ile tümden kapatılır.
 """
 from __future__ import annotations
 
@@ -29,6 +35,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from app.audio import SEEK_SECONDS, PodcastPlayer
 from app.calibration import (
     DEFAULT_PATH as CAL_PATH,
     collect_corners_interactive,
@@ -56,6 +63,38 @@ MOTIF_LABELS = {
     "hayat_agaci": "Hayat ağacı",
 }
 
+# Motif → podcast eşlemesi DOSYA ADI ANAHTAR KELİMESİYLE çözülür (sabit ad yerine),
+# böylece mp3'ler aynı isimlendirmeyle yeniden export edilirse de bulunur. Anahtarlar
+# küçük harfe çevrilen ad içinde aranır (İ/ı tuzağından kaçmak için sade alt dizgiler).
+PODCAST_KEYWORDS = {
+    "eli_belinde": "belinde",   # "İlmeklerin Gölgesi Final (Eli Belinde).mp3"
+    "hayat_agaci": "hayat",     # "Ölümsüz İlmekler Final (Hayat Ağacı).mp3"
+}
+
+# Podcast paneldeki kısa adı (uzun dosya adını taşırmamak için).
+PODCAST_LABELS = {
+    "eli_belinde": "İlmeklerin Gölgesi",
+    "hayat_agaci": "Ölümsüz İlmekler",
+}
+
+
+def resolve_podcasts(assets_dir: Path = Path("assets")) -> dict:
+    """assets/*.mp3 dosyalarını PODCAST_KEYWORDS ile motiflere eşle.
+
+    Dönüş: {motif: mp3 yolu}. Eşleşmeyen motif sözlükte yer almaz (o motifte ses
+    olmaz, oynatıcı sessizce atlar). İlk eşleşen dosya kazanır.
+    """
+    found: dict = {}
+    if not assets_dir.exists():
+        return found
+    mp3s = sorted(assets_dir.glob("*.mp3"))
+    for motif, kw in PODCAST_KEYWORDS.items():
+        for p in mp3s:
+            if kw in p.name.lower():
+                found[motif] = p
+                break
+    return found
+
 # Her N karede 1 renk kontrolü. Kontrol pahalı; 5 = göze anlık görünür + CPU yormaz.
 COLOR_CHECK_EVERY_N = 5
 
@@ -76,6 +115,9 @@ PORTRAIT_CAMERA_VIEW = (720, 405)    # (W, H) — üstteki kamera kutusu (16:9)
 # o yüzden tam kodu waitKeyEx ile okuyup burada karşılaştırıyoruz.
 KEY_UP = {65362, 16777235, 2490368, 63232}
 KEY_DOWN = {65364, 16777237, 2621440, 63233}
+# Sol/Sağ ok → podcast 30 sn geri/ileri (yine backend'e göre değişen tam kodlar).
+KEY_LEFT = {65361, 16777234, 2424832, 63234}
+KEY_RIGHT = {65363, 16777236, 2555904, 63235}
 
 # Dijital zoom (z=yakınlaş, x=uzaklaş). Çarpımsal adım → her basışta yumuşak oran.
 # 1.0 = tam görüntü (en uzak), ZOOM_MAX = en yakın. Optik değil, AR görüntüsü kırpılır.
@@ -299,6 +341,8 @@ def main():
                     help="720p portrait ekran düzeni (720×1280): kamera üstte, panel altta")
     ap.add_argument("--no-flip", action="store_true",
                     help="kamerayı döndürme (varsayılan: 180° döndür; aynalama yok)")
+    ap.add_argument("--no-audio", action="store_true",
+                    help="motife bağlı podcast oynatıcıyı tümden kapat")
     args = ap.parse_args()
 
     # Varsayılan: kamera karesi 180° döndürülür (orient_frame); aynalama YOK.
@@ -346,6 +390,7 @@ def main():
     # ctrl["command"]'a yazar; klavye de aynı komutları yazar → tek işleyici (döngü
     # başında) hepsini uygular. transparency/zoom canlı okunur.
     ctrl = {"transparency": TRANSP_DEFAULT, "zoom": 1.0, "command": None, "rects": {}}
+    player = None  # podcast oynatıcı (kalibrasyondan sonra kurulur); finally için ön-tanım
 
     def on_main_mouse(event, x, y, flags, _):
         if event != cv2.EVENT_LBUTTONDOWN:
@@ -379,6 +424,12 @@ def main():
         tracker = ProgressTracker(rows=chart.rows, cols=chart.cols, direction=direction)
         renderer = OverlayRenderer(chart, direction=direction, transparency=ctrl["transparency"])
         backend = HSVBackend(chart.palette_rgb)
+
+        # Podcast oynatıcı: KALİBRASYON BİTTİKTEN SONRA kurulur ve seçili motifin
+        # podcast'i (autoplay) çalmaya başlar. Ses cihazı/kütüphane yoksa sessizce
+        # devre dışı kalır (enabled=False) → kontroller no-op, uygulama çökmez.
+        player = PodcastPlayer(resolve_podcasts(), autoplay=True, enabled=not args.no_audio)
+        player.set_motif(motif)
 
         do_color_check = not args.no_color_check
 
@@ -419,6 +470,8 @@ def main():
                                                transparency=ctrl["transparency"])
                     backend = HSVBackend(chart.palette_rgb)
                     last_mismatches = []
+                    # Yeni motifin podcast'ine geç: kaldığı yerden, çalma/durma korunur.
+                    player.set_motif(motif)
                 continue
             elif cmd == "recalibrate":
                 cv2.destroyWindow(win)
@@ -451,6 +504,18 @@ def main():
                 do_color_check = not do_color_check
                 if not do_color_check:
                     last_mismatches = []  # cached uyarıları temizle
+            elif cmd == "pod_toggle":
+                player.toggle()
+            elif cmd == "pod_back":
+                player.seek(-SEEK_SECONDS)
+            elif cmd == "pod_fwd":
+                player.seek(+SEEK_SECONDS)
+            elif cmd == "pod_vol_down":
+                player.volume_down()
+            elif cmd == "pod_vol_up":
+                player.volume_up()
+
+            player.update()  # podcast doğal bitişini yakala
 
             frame = provider()
             if frame is None:  # kamera kapandı / görsel sonu
@@ -476,14 +541,19 @@ def main():
             ar_view = _zoom_view(ar_view, ctrl["zoom"])
             ar_view = _fit_to_box(ar_view, *camera_box)
 
-            # ADIM 4: panel.
+            # ADIM 4: panel (podcast bloğu dahil — buton rect'leri panel-yerel döner).
             check_row = last_completed_row(active_row, chart.rows, direction)
-            panel = ui.render_panel(
+            panel, pod_rects = ui.render_panel(
                 chart, active_row, direction, last_mismatches,
                 height=panel_height if panel_height is not None else ar_view.shape[0],
-                check_row=check_row,
+                check_row=check_row, player=player,
+                podcast_label=PODCAST_LABELS.get(motif, ""),
             )
             composed = ui.compose(ar_view, panel, vertical=args.portrait)
+            # Panel composed'da kameranın sağında (yatay) ya da altında (portrait) durur.
+            # Podcast rect'lerini bu ofsetle composed uzayına taşı (compose yeniden
+            # ölçeklemediği — boyutlar eşit — için rect'ler lineer kayar).
+            pod_ox, pod_oy = (0, ar_view.shape[0]) if args.portrait else (ar_view.shape[1], 0)
 
             # ADIM 5: FPS (EMA ile yumuşatılmış).
             t_now = time.time()
@@ -501,6 +571,8 @@ def main():
                 (f"{fps_ema:.0f} FPS", (composed.shape[1] - 12, 32), 22, (60, 230, 230), True, "rs"),
             ]
             rects, btn_texts = _draw_button_bar(composed, camera_box, do_color_check)
+            for name, (x1, y1, x2, y2) in pod_rects.items():
+                rects[name] = (x1 + pod_ox, y1 + pod_oy, x2 + pod_ox, y2 + pod_oy)
             ctrl["rects"] = rects
             _draw_texts(composed, overlay_texts + btn_texts)
             cv2.imshow(win, composed)
@@ -513,6 +585,10 @@ def main():
                 ctrl["command"] = "row_up"
             elif raw in KEY_DOWN:
                 ctrl["command"] = "row_down"
+            elif raw in KEY_LEFT:
+                ctrl["command"] = "pod_back"
+            elif raw in KEY_RIGHT:
+                ctrl["command"] = "pod_fwd"
             elif key in (27, ord("q")):
                 ctrl["command"] = "quit"
             elif key in (ord("r"), ord("R")):
@@ -529,8 +605,16 @@ def main():
                 ctrl["command"] = "zoom_in"
             elif key in (ord("x"), ord("X")):
                 ctrl["command"] = "zoom_out"
+            elif key in (ord("p"), ord("P")):
+                ctrl["command"] = "pod_toggle"
+            elif key in (ord(","), ord("<")):
+                ctrl["command"] = "pod_vol_down"
+            elif key in (ord("."), ord(">")):
+                ctrl["command"] = "pod_vol_up"
     finally:
-        # cap None olabilir (sabit görsel modu).
+        # player None olabilir (kalibrasyondan önce iptal); cap None olabilir (görsel modu).
+        if player is not None:
+            player.close()
         if cap is not None:
             cap.release()
         cv2.destroyAllWindows()
