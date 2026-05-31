@@ -13,11 +13,17 @@ from PyInstaller.utils.hooks import collect_all
 # paylaşımlı kütüphaneler + Qt eklentileri (cv2.imshow için) + config dosyaları.
 cv2_datas, cv2_binaries, cv2_hidden = collect_all("cv2")
 
+# pygame (app/audio.py podcast oynatıcı): SDL2 + SDL2_mixer paylaşımlı kütüphaneleri
+# ve mp3 kod çözücüleri wheel içinde gelir; cv2 gibi tüm parçalarıyla toplanır ki
+# donmuş ikilide ses çalışsın. (mutagen saf Python → import ile otomatik alınır.)
+pg_datas, pg_binaries, pg_hidden = collect_all("pygame")
+
 # Çalışma zamanında KULLANILMAYAN ağır bağımlılıkları dışla (YOLO pivotundan kalma;
 # requirements.txt'de bulunsalar da app/ içinde import edilmezler). PyInstaller
 # zaten import edilmeyeni almaz, ama yanlışlıkla çekilmelerini de engelleriz.
+# NOT: pygame ARTIK burada DEĞİL — podcast sesi için runtime'da kullanılıyor.
 EXCLUDES = [
-    "pygame", "albumentations", "skimage", "scipy", "matplotlib",
+    "albumentations", "skimage", "scipy", "matplotlib",
     "tkinter", "pandas", "IPython", "pytest", "setuptools",
     "torch", "torchvision", "tensorflow", "onnx", "onnxruntime",
 ]
@@ -25,9 +31,9 @@ EXCLUDES = [
 a = Analysis(
     ["motifika_launcher.py"],
     pathex=["."],
-    binaries=cv2_binaries,
-    datas=cv2_datas,
-    hiddenimports=cv2_hidden,
+    binaries=cv2_binaries + pg_binaries,
+    datas=cv2_datas + pg_datas,
+    hiddenimports=cv2_hidden + pg_hidden,
     hookspath=[],
     runtime_hooks=[],
     excludes=EXCLUDES,

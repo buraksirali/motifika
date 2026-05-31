@@ -12,9 +12,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 ARGS=("$@")
-# Hiç argüman verilmediyse makul varsayılanlar (eli_belinde, 30×60).
+# Hiç argüman verilmediyse makul varsayılan motif. rows/cols VERMİYORUZ: ikilinin
+# varsayılanı (44×38) kayıtlı chartlarla uyumlu. Izgara zaten kalibre edilen alanı
+# doldurur (chart'ın rows×cols'una göre), o yüzden burada zorlamaya gerek yok.
 if [[ ${#ARGS[@]} -eq 0 ]]; then
-    ARGS=(--motif eli_belinde --rows 30 --cols 60)
+    ARGS=(--motif eli_belinde)
 fi
 
 # Belirli bir bayrak verilmediyse ekle: USB kamera 0 + portrait düzen + tam ekran.

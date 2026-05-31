@@ -1,7 +1,12 @@
 # MOTİFİKA çalışma-zamanı (frozen) bağımlılıkları — yalnızca app/ içinde gerçekten
-# import edilenler. requirements.txt'deki pygame/albumentations/scikit-image YOLO
-# pivotundan kalmadır ve runtime'da kullanılmaz; donmuş ikiliyi küçük tutmak için
-# burada yer almaz. opencv-python (headless DEĞİL): cv2.imshow/namedWindow için GUI gerekir.
+# import edilenler. requirements.txt'deki albumentations/scikit-image YOLO pivotundan
+# kalmadır ve runtime'da kullanılmaz; donmuş ikiliyi küçük tutmak için burada yer almaz.
+# opencv-python (headless DEĞİL): cv2.imshow/namedWindow için GUI gerekir.
 opencv-python>=4.8
 numpy>=1.24
 Pillow>=10.0
+# Motife bağlı podcast oynatıcı (app/audio.py): pygame.mixer ses çalar (mp3 seek/pause/
+# volume), mutagen mp3 süresini okur (saf Python). pygame wheel'i SDL2/SDL2_mixer'ı
+# kendi içinde taşır → ekstra sistem paketi gerekmez (aarch64 wheel mevcut).
+pygame>=2.5
+mutagen>=1.45

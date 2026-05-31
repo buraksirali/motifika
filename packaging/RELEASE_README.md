@@ -58,7 +58,19 @@ Farklı motif/boyut:
 | `r` | yeniden kalibrasyon |
 | `d` | dokuma yönü değiştir (bottom_up ↔ top_down) |
 | `c` | renk kontrolü aç/kapat |
+| `p` | podcast oynat / duraklat |
+| ← / → | podcast 30 sn geri / ileri |
+| `,` / `.` | podcast ses azalt / artır |
 | `q` / ESC | çıkış |
+
+### Podcast (motife bağlı)
+
+Kalibrasyon biter bitmez **seçili motifin podcast'i** çalmaya başlar (eli_belinde ve
+hayat_agaci ayrı ses dosyalarıdır; `assets/` içindeki `.mp3`'ler). Sağ paneldeki
+podcast kutusundan dokunmatik olarak **Oynat/Duraklat**, **±30 sn** ve **Ses −/+**
+yapılır; konum ve ses düzeyi orada gösterilir. **Motif** butonuyla diğer motife
+geçilince yeni podcast **kaldığı yerden** sürer. Sesi tümden kapatmak için:
+`./run.sh --no-audio`.
 
 ## 5. Ekran yönü
 
@@ -80,3 +92,8 @@ ya da `/boot/firmware/cmdline.txt` / `wlr-randr` ile).
   durduğundan emin olun (panel fontu oradan yüklenir).
 - **Kamera açılmıyor** → `--camera` indeksini deneyin (0, 1, …) ve kullanıcının
   `video` grubunda olduğundan emin olun: `sudo usermod -aG video $USER` (sonra çıkış/giriş).
+- **Podcast sesi çıkmıyor** → ses ALSA varsayılan çıkışından gelir. Doğru çıkışı
+  seçin: `sudo raspi-config` → *System Options* → *Audio* (HDMI / 3.5 mm jack / USB),
+  ya da masaüstü ses menüsünden cihazı seçin. Ses cihazı hiç yoksa uygulama yine
+  çalışır; podcast kutusu "ses kapalı / cihaz yok" gösterir. Tümden kapatmak için
+  `./run.sh --no-audio`.

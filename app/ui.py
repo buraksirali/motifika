@@ -83,6 +83,12 @@ def _draw_texts(img_bgr: np.ndarray, items: list) -> None:
     img_bgr[:] = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
 
+def _fmt_time(seconds: float) -> str:
+    """Saniyeyi mm:ss biçimine çevir (negatifi 0 say). Podcast konum/süre göstergesi."""
+    s = max(0, int(round(seconds)))
+    return f"{s // 60:d}:{s % 60:02d}"
+
+
 def _color_name(rgb: np.ndarray) -> str:
     """RGB'den yaklaşık Türkçe renk adı (palette küçük, temel ayrım yeterli)."""
     r, g, b = int(rgb[0]), int(rgb[1]), int(rgb[2])
@@ -164,8 +170,15 @@ class UIRenderer:
         mismatches: list,
         height: int,
         check_row: int | None = None,
-    ) -> np.ndarray:
-        """Sağ kontrol panelini çiz."""
+        player=None,
+        podcast_label: str = "",
+    ) -> "tuple[np.ndarray, dict]":
+        """Sağ kontrol panelini çiz.
+
+        Dönüş: (panel, podcast_rects). podcast_rects = {komut: (x1,y1,x2,y2)} PANEL-YEREL
+        koordinatlarda; çağıran (main.py) panel ofsetini ekleyip composed uzayına taşır.
+        player None/devre dışıysa podcast bloğu çizilmez, rect'ler boş döner.
+        """
         panel = np.full((height, self.panel_width, 3), 30, dtype=np.uint8)  # koyu gri zemin
         m = self.margin
         content_w = self.panel_width - 2 * m
@@ -251,17 +264,76 @@ class UIRenderer:
             texts.append(("Renk uyumu: OK", (m, y), 22, (120, 220, 120), True))
             y += 24
 
-        # Klavye yardımı — panelin en altına sabit. (Dokunmatik için ekran butonları da var.)
-        y_help = height - 130
-        for line in ["Klavye:", "ok tuşları: sıra   z/x: zoom",
-                     "+/-: saydamlık   d: yön",
-                     "c: renk   r: kalibre   q: çıkış"]:
-            texts.append((line, (m, y_help), 16, (170, 170, 170), False))
-            y_help += 24
+        # Podcast bloğu panelin en altına SABİT konumda çizilir (akışkan içerikten
+        # bağımsız → buton rect'leri kararlı). Üstüne yeni tuşlar için kısa tek satır
+        # ipucu konur (eski 4 satırlık klavye yardımı bunun yerini aldı; dokunmatik
+        # butonlar zaten her komutu kapsıyor).
+        podcast_rects: dict = {}
+        if player is not None:
+            texts.append(("Tuşlar  ←/→: ±30 sn   p: oynat/dur   ,/.: ses",
+                          (m, height - 128), 15, (150, 150, 150), False))
+            pod_texts, podcast_rects = self._draw_podcast(panel, player, podcast_label, height)
+            texts.extend(pod_texts)
 
         # Tüm metinleri tek PIL geçişiyle çiz (Türkçe karakterler doğru görünsün).
         _draw_texts(panel, texts)
-        return panel
+        return panel, podcast_rects
+
+    def _draw_podcast(self, panel: np.ndarray, player, label: str, height: int) -> tuple:
+        """Panel altına kompakt podcast kontrol bloğu çiz; (texts, rects) döndür.
+
+        Buton dikdörtgenleri burada cv2 ile çizilir; etiketleri ise render_panel'in
+        tek PIL geçişinde basılsın diye texts listesinde döndürülür (net TTF). rect'ler
+        PANEL-YEREL koordinatlarda; main.py panel ofsetini ekleyip mouse ile eşler.
+        Glyph'ler DejaVu'da güvenli olanlardan seçildi (▶ ‖ ← →; emoji yok).
+        """
+        m = self.margin
+        content_w = self.panel_width - 2 * m
+        texts: list = []
+        rects: dict = {}
+
+        y0 = height - 110  # blok üst kenarı (ayraç çizgisi)
+        cv2.line(panel, (m, y0), (m + content_w, y0), (70, 70, 70), 1)
+
+        # Devre dışı (ses cihazı/kütüphane yok) → tek bilgi satırı, buton yok.
+        if not getattr(player, "enabled", False):
+            texts.append(("Podcast: ses kapalı / cihaz yok", (m, y0 + 24), 18,
+                          (150, 150, 150), False))
+            return texts, rects
+
+        # Başlık + kısa ad (tek satır).
+        name = label or "—"
+        texts.append((f"Podcast: {name}", (m, y0 + 22), 20, (50, 220, 220), True))
+
+        # Durum satırı: konum / süre, durum sözcüğü, ses %.
+        dur = player.duration()
+        dur_str = _fmt_time(dur) if dur is not None else "--:--"
+        if player.ended:
+            durum = "Bitti"
+        elif player.is_playing():
+            durum = "Çalıyor"
+        else:
+            durum = "Duraklı"
+        vol_pct = int(round(player.volume * 100))
+        texts.append((f"{_fmt_time(player.position())} / {dur_str}    {durum}    Ses %{vol_pct}",
+                      (m, y0 + 46), 17, (180, 220, 255), False))
+
+        # 5 eşit dokunmatik buton: -30sn | oynat/dur | +30sn | ses- | ses+.
+        toggle = "‖" if player.is_playing() else "▶"
+        buttons = [("pod_back", "-30 sn"), ("pod_toggle", toggle),
+                   ("pod_fwd", "+30 sn"), ("pod_vol_down", "Ses −"),
+                   ("pod_vol_up", "Ses +")]
+        n, gap, bh = len(buttons), 6, 42
+        by = y0 + 58
+        bw = (content_w - gap * (n - 1)) // n
+        for i, (cmd, blabel) in enumerate(buttons):
+            x1 = m + i * (bw + gap)
+            x2, y2 = x1 + bw, by + bh
+            rects[cmd] = (x1, by, x2, y2)
+            cv2.rectangle(panel, (x1, by), (x2, y2), (55, 55, 55), -1)
+            cv2.rectangle(panel, (x1, by), (x2, y2), (210, 210, 210), 1)
+            texts.append((blabel, (x1 + bw // 2, by + bh // 2), 18, (255, 255, 255), True, "mm"))
+        return texts, rects
 
     def compose(self, camera_view: np.ndarray, panel: np.ndarray,
                 vertical: bool = False) -> np.ndarray:
