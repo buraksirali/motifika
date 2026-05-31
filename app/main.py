@@ -35,6 +35,7 @@ from app.calibration import (
     load_calibration,
     orient_frame,
     save_calibration,
+    setup_window,
 )
 from app.color_check import HSVBackend, check_active_row, last_completed_row
 from app.overlay import DEFAULT_TRANSPARENCY, Chart, OverlayRenderer
@@ -99,16 +100,25 @@ BUTTON_ROWS = [
 
 
 def ensure_chart(motif: str, rows: int, cols: int, palette: int) -> Path:
-    """assets/<motif>_chart.json yoksa motif kaynağından üret (varsa cache)."""
+    """assets/<motif>_chart.json VARSA olduğu gibi kullan; YOKSA k-means ile üret.
+
+    Kayıtlı chartlar `tools/regen_motif_charts.py` ile motifin GERÇEK ızgarasında
+    üretilir (her kağıt karesi = bir dokuma düğümü → piksel kaybı/artifact yok). Bu
+    yüzden onları yeniden üretip BOZMAYIZ; oldukları gibi kullanırız. rows/cols/palette
+    yalnızca chart hiç yoksa (k-means yedeği) devreye girer. Bir motifin ızgarasını
+    değiştirmek istersen regen aracını çalıştır — kalibrasyon ızgaradan bağımsız
+    olduğundan her motif kendi gerçek boyutunda kalibre edilen alana sığar.
+    """
     assets = Path("assets")
     chart_path = assets / f"{motif}_chart.json"
+    if chart_path.exists():
+        return chart_path
 
-    if not chart_path.exists():
-        src = MOTIFS.get(motif)
-        if src is None or not src.exists():
-            raise FileNotFoundError(f"motif kaynağı yok: {motif}")
-        chart = build_chart(src, rows, cols, palette)
-        save_chart(chart, chart_path)
+    src = MOTIFS.get(motif)
+    if src is None or not src.exists():
+        raise FileNotFoundError(f"motif kaynağı yok: {motif}")
+    chart = build_chart(src, rows, cols, palette)
+    save_chart(chart, chart_path)  # .preview.png de üretilir
     return chart_path
 
 
@@ -125,6 +135,28 @@ def _load_preview(motif: str) -> "np.ndarray | None":
     """Motif seçicide gösterilecek pikselleştirilmiş önizleme (assets/<motif>_chart.preview.png)."""
     p = Path("assets") / f"{motif}_chart.preview.png"
     return cv2.imread(str(p)) if p.exists() else None
+
+
+def chart_homography(cal_data: dict, chart: Chart):
+    """Izgaradan bağımsız birim-kare kalibrasyonunu bu chart'a özgü H'ye çevir.
+
+    cal_data["H_unit_to_cam"] birim kareyi (0..1) kalibre edilen ALANA (kamera
+    quad'ı) haritalar. Burada chart-birimini (x∈[0,cols], y∈[0,rows]) birim kareye
+    normalize edip (diag(1/cols, 1/rows, 1)) zincirliyoruz → chart [0..cols]×[0..rows]
+    TAM olarak kalibre edilen alanı doldurur. Kareler perspektifle eşit olmayabilir
+    (sorun değil). rows/cols değişince alan DEĞİŞMEZ; bölünme sıklaşır/seyrekleşir.
+    overlay/progress/color_check değişmeden chart-birim H'leriyle çalışmaya devam eder.
+    """
+    H_unit_to_cam = np.array(cal_data["H_unit_to_cam"], dtype=np.float64)
+    norm = np.array(
+        [[1.0 / chart.cols, 0.0, 0.0],
+         [0.0, 1.0 / chart.rows, 0.0],
+         [0.0, 0.0, 1.0]],
+        dtype=np.float64,
+    )
+    H_chart_to_cam = H_unit_to_cam @ norm
+    H_cam_to_chart = np.linalg.inv(H_chart_to_cam)
+    return H_chart_to_cam, H_cam_to_chart
 
 
 def pick_motif_interactive(motifs: dict, labels: dict, screen_size, fullscreen=False,
@@ -163,9 +195,7 @@ def pick_motif_interactive(motifs: dict, labels: dict, screen_size, fullscreen=F
                     state["choice"] = k
 
     win = "MOTIFIKA - Motif Sec"
-    cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-    if fullscreen:
-        cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    setup_window(win, fullscreen, screen_size)  # canvas zaten screen_size → 1:1
     cv2.setMouseCallback(win, on_mouse)
 
     try:
@@ -232,24 +262,31 @@ def open_camera_or_image(args, frame_size_hint=(1280, 720), flip: bool = True):
 
 
 def run_calibration_flow(provider, rows, cols, frame_size, out_path: Path,
-                         fullscreen: bool = False, orientation: str = "none") -> dict:
+                         fullscreen: bool = False, orientation: str = "none",
+                         screen_size=None) -> dict:
     """4 köşe topla → homography hesapla → JSON'a kaydet.
 
     orientation, JSON'a yazılır; provider zaten o yöndeki kareyi verdiği için
     köşeler aynı yönde toplanır — homography de bu yönle tutarlı olur.
+    screen_size, kalibrasyon penceresini ana ekranla aynı çözünürlüğe kilitler.
     """
-    corners, fs = collect_corners_interactive(provider, rows, cols, fullscreen)
+    corners, fs = collect_corners_interactive(provider, rows, cols, fullscreen, screen_size)
     if fs is None:  # provider hiç frame vermediyse hint kullan
         fs = frame_size
-    return save_calibration(out_path, rows, cols, corners, fs, orientation=orientation)
+    # rows/cols yalnızca kalibrasyon ekranındaki bilgi metni içindi; kayıt ızgaradan
+    # bağımsız (birim kare → alan). Izgara main.py'de chart'a göre uygulanır.
+    return save_calibration(out_path, corners, fs, orientation=orientation)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--motif", choices=list(MOTIFS.keys()), default="eli_belinde")
-    ap.add_argument("--rows", type=int, default=44)
-    ap.add_argument("--cols", type=int, default=38)
-    ap.add_argument("--palette", type=int, default=4)
+    # Izgara kalibre edilen alanı böler; her motif KENDİ gerçek ızgarasında kayıtlı
+    # (regen aracı, native → artifact yok), varsayılan çalışmada o kullanılır.
+    # --rows/--cols/--palette YALNIZCA chart hiç yoksa (k-means yedeği) devreye girer.
+    ap.add_argument("--rows", type=int, default=60)
+    ap.add_argument("--cols", type=int, default=44)
+    ap.add_argument("--palette", type=int, default=2)
     ap.add_argument("--direction", choices=["bottom_up", "top_down"], default="bottom_up")
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--image", type=Path, default=None,
@@ -294,10 +331,13 @@ def main():
     # Eski kalibrasyon hâlâ uyuyor mu? rows/cols/frame_size + orientation aynıysa kullan.
     # Kalibrasyon MOTİFTEN BAĞIMSIZ → aynı kalibrasyon farklı motiflerle kullanılabilir.
     cal_data = load_calibration(CAL_PATH)
+    # Kalibrasyon IZGARADAN BAĞIMSIZ (birim kare → kamera alanı). Eşleşme yalnızca
+    # frame_size + orientation'a bakar; rows/cols değişse de AYNI alan kullanılır →
+    # ızgara yoğunluğunu değiştirmek yeniden kalibrasyon gerektirmez. "H_unit_to_cam"
+    # yoksa dosya eski şemadır → eşleşmez, otomatik yeniden kalibre olur.
     cal_match = (
         cal_data is not None
-        and cal_data.get("rows") == args.rows
-        and cal_data.get("cols") == args.cols
+        and "H_unit_to_cam" in cal_data
         and tuple(cal_data.get("frame_size", [])) == frame_size
         and cal_data.get("orientation") == orientation
     )
@@ -327,11 +367,13 @@ def main():
         if args.recalibrate or not cal_match:
             print("kalibrasyon başlatılıyor: 4 köşeye SOL ÜST → SAĞ ÜST → SAĞ ALT → SOL ALT sırasıyla tıkla")
             cal_data = run_calibration_flow(provider, args.rows, args.cols, frame_size,
-                                            CAL_PATH, args.fullscreen, orientation=orientation)
+                                            CAL_PATH, args.fullscreen, orientation=orientation,
+                                            screen_size=screen_size)
             print(f"kalibrasyon kaydedildi: {CAL_PATH}")
 
-        H_chart_to_cam = np.array(cal_data["H_chart_to_cam"], dtype=np.float64)
-        H_cam_to_chart = np.array(cal_data["H_cam_to_chart"], dtype=np.float64)
+        # Izgaradan bağımsız birim-kare kalibrasyonunu bu chart'ın rows×cols'una göre
+        # normalize et → chart-birim ↔ kamera. Izgara kalibre edilen alanı tam doldurur.
+        H_chart_to_cam, H_cam_to_chart = chart_homography(cal_data, chart)
 
         # 4 çalışan: döngü boyunca yaşar, her karede metodları çağrılır.
         tracker = ProgressTracker(rows=chart.rows, cols=chart.cols, direction=direction)
@@ -341,7 +383,7 @@ def main():
         do_color_check = not args.no_color_check
 
         win = "MOTIFIKA"
-        _make_window(win, args.fullscreen)
+        setup_window(win, args.fullscreen, screen_size)
         cv2.setMouseCallback(win, on_main_mouse)  # ekran butonları için
 
         frame_idx = 0
@@ -364,11 +406,14 @@ def main():
                                                     args.fullscreen, default=motif)
                 except KeyboardInterrupt:
                     chosen = None  # iptal → mevcut motif kalsın
-                _make_window(win, args.fullscreen)
+                setup_window(win, args.fullscreen, screen_size)
                 cv2.setMouseCallback(win, on_main_mouse)
                 if chosen and chosen != motif:
                     motif = chosen
                     chart = _load_chart(motif, args)
+                    # Yeni chart'ın rows×cols'u farklı olabilir → H'yi yeniden kur
+                    # (kalibrasyon ızgaradan bağımsız, alan aynı kalır).
+                    H_chart_to_cam, H_cam_to_chart = chart_homography(cal_data, chart)
                     tracker = ProgressTracker(rows=chart.rows, cols=chart.cols, direction=direction)
                     renderer = OverlayRenderer(chart, direction=direction,
                                                transparency=ctrl["transparency"])
@@ -379,11 +424,10 @@ def main():
                 cv2.destroyWindow(win)
                 cal_data = run_calibration_flow(
                     provider, args.rows, args.cols, frame_size, CAL_PATH,
-                    args.fullscreen, orientation=orientation,
+                    args.fullscreen, orientation=orientation, screen_size=screen_size,
                 )
-                H_chart_to_cam = np.array(cal_data["H_chart_to_cam"], dtype=np.float64)
-                H_cam_to_chart = np.array(cal_data["H_cam_to_chart"], dtype=np.float64)
-                _make_window(win, args.fullscreen)
+                H_chart_to_cam, H_cam_to_chart = chart_homography(cal_data, chart)
+                setup_window(win, args.fullscreen, screen_size)
                 cv2.setMouseCallback(win, on_main_mouse)
                 continue
             elif cmd == "row_up":
@@ -490,19 +534,6 @@ def main():
         if cap is not None:
             cap.release()
         cv2.destroyAllWindows()
-
-
-def _make_window(win: str, fullscreen: bool) -> None:
-    """MOTIFIKA penceresini oluştur; istenirse tam ekran moduna al.
-
-    WINDOW_NORMAL açılır pencere verir; fullscreen istenince pencere özelliği
-    WINDOW_FULLSCREEN'e çekilir. WINDOW_KEEPRATIO: ekran oranı birleşik görüntüden
-    farklıysa görüntüyü esnetmeden (letterbox ile) gösterir — yatay düzen 1280×720
-    olduğundan 720p ekrana bire bir oturur; farklı çözünürlükte de bozulmaz.
-    """
-    cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
-    if fullscreen:
-        cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 
 def _fit_to_box(img: np.ndarray, box_w: int, box_h: int) -> np.ndarray:

@@ -15,8 +15,11 @@ import cv2
 import numpy as np
 
 
-# Bir hücrenin chart-piksel boyutu. Diğer modüllerdeki CELL_PX'lerle senkron olmalı.
-CELL_PX = 16
+# Bir hücrenin chart-piksel boyutu = overlay'in iç render çözünürlüğü. Modüle ÖZELdir
+# (progress/color_check kendi CELL_PX'ini kullanır; homography chart-BİRİM olduğu için
+# bağımsızdırlar). Büyük = daha keskin overlay (hücre kenarları), warp alana büyütülünce
+# bulanıklaşmaz. 24: 44×38 chart → ~1056×912 katman; net + Pi'de ucuz.
+CELL_PX = 24
 
 # Saydamlık (transparency): kullanıcı 0.10–1.00 arası ayarlar; YÜKSEK = daha şeffaf.
 # Temel opaklık = 1 - transparency. Üç bölge bu temelin oranlarıyla çizilir, böylece
@@ -192,7 +195,10 @@ def _cli_smoke():
 
     chart = Chart.load(args.chart)
     cal = json.loads(args.calibration.read_text())
-    H_chart_to_cam = np.array(cal["H_chart_to_cam"], dtype=np.float64)
+    # Kalibrasyon ızgaradan bağımsız (birim kare → kamera); chart'a göre normalize et.
+    H_unit = np.array(cal["H_unit_to_cam"], dtype=np.float64)
+    norm = np.array([[1 / chart.cols, 0, 0], [0, 1 / chart.rows, 0], [0, 0, 1]], dtype=np.float64)
+    H_chart_to_cam = H_unit @ norm
 
     if args.frame:
         frame = cv2.imread(str(args.frame))

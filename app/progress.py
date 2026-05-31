@@ -143,15 +143,20 @@ def _cli_smoke():
     ap = argparse.ArgumentParser()
     ap.add_argument("image", type=Path)
     ap.add_argument("--calibration", type=Path, default=Path("assets/calibration.json"))
+    ap.add_argument("--rows", type=int, default=44)
+    ap.add_argument("--cols", type=int, default=38)
     args = ap.parse_args()
 
     cal = json.loads(args.calibration.read_text())
-    H_cam_to_chart = np.array(cal["H_cam_to_chart"], dtype=np.float32)
+    # Izgaradan bağımsız birim-kare kalibrasyonunu rows×cols'a göre normalize et.
+    H_unit = np.array(cal["H_unit_to_cam"], dtype=np.float64)
+    norm = np.array([[1 / args.cols, 0, 0], [0, 1 / args.rows, 0], [0, 0, 1]], dtype=np.float64)
+    H_cam_to_chart = np.linalg.inv(H_unit @ norm).astype(np.float32)
 
     frame = cv2.imread(str(args.image))
-    tracker = ProgressTracker(rows=cal["rows"], cols=cal["cols"])
+    tracker = ProgressTracker(rows=args.rows, cols=args.cols)
     row = tracker.update(frame, H_cam_to_chart)
-    print(f"aktif sıra: {row} / {cal['rows']}")
+    print(f"aktif sıra: {row} / {args.rows}")
     print(f"skorlar: {np.round(tracker._score_ema, 2).tolist()}")
 
 
