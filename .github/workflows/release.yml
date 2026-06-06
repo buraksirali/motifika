@@ -88,9 +88,10 @@ jobs:
           mkdir -p "$PKG"/fonts
           cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf \
              /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf "$PKG"/fonts/
-          # Başlatıcı + README.
+          # Başlatıcı + masaüstü kısayolu scripti + README.
           cp packaging/run.sh "$PKG"/run.sh
-          chmod +x "$PKG"/run.sh "$PKG"/motifika
+          cp packaging/create_shortcut.sh "$PKG"/create_shortcut.sh
+          chmod +x "$PKG"/run.sh "$PKG"/create_shortcut.sh "$PKG"/motifika
           cp packaging/RELEASE_README.md "$PKG"/README.md
           tar -czf "$PKG.tar.gz" "$PKG"
           ls -lh "$PKG.tar.gz"
