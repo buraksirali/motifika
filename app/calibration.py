@@ -101,8 +101,13 @@ def setup_window(win: str, fullscreen: bool = False,
     flags = cv2.WINDOW_NORMAL | (cv2.WINDOW_KEEPRATIO if keep_ratio else 0)
     cv2.namedWindow(win, flags)
     if fullscreen:
+        # Tam ekranda SADECE fullscreen property'si — resize/move ÇAĞIRMA.
+        # Pi'nin HighGUI (Qt) backend'inde property'den sonra resizeWindow/moveWindow
+        # çağırmak fullscreen'i bozup pencereyi normal boyuta indiriyor ve WM onu
+        # köşeye yerleştirince görüntü sağ-alta kaymış görünüyordu. Dev (QT5 sistem
+        # derlemesi) bu sıralamayı tolere ettiği için sorun yalnızca Pi'de çıkıyordu.
         cv2.setWindowProperty(win, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    if size is not None:
+    elif size is not None:
         cv2.resizeWindow(win, int(size[0]), int(size[1]))
         cv2.moveWindow(win, 0, 0)
 
