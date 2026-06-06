@@ -7,9 +7,23 @@ Dikey (720×1280) için: `./run.sh --portrait`.
 
 ## 1. Kurulum
 
+### Kolay yol — tek komut (önerilen)
+
+Pi'de tek satır son sürümü indirir, açar ve **masaüstü/menü kısayolu** oluşturur:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/buraksirali/motifika/main/packaging/install.sh | bash
+```
+
+Varsayılan kurulum klasörü `~/motifika`. Farklı yer için:
+`MOTIFIKA_DIR=/opt/motifika wget -qO- .../install.sh | bash`.
+
+### Elle yol
+
 ```bash
 tar -xzf motifika-rpi-arm64.tar.gz
 cd motifika-rpi-arm64
+./create_shortcut.sh     # (isteğe bağlı) masaüstü + menü kısayolu oluştur
 ```
 
 ## 2. Sistem bağımlılıkları (tek seferlik)

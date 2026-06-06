@@ -48,7 +48,7 @@ from app.color_check import HSVBackend, check_active_row, last_completed_row
 from app.overlay import DEFAULT_TRANSPARENCY, Chart, OverlayRenderer
 from app.pattern import build_chart, save_chart
 from app.progress import ProgressTracker
-from app.ui import UIRenderer, _draw_texts
+from app.ui import UIRenderer, _draw_texts, _rounded_rect
 
 
 # Motif kataloğu: isim → kaynak görsel. Yeni motif = buraya satır + görsel ekle.
@@ -128,14 +128,14 @@ ZOOM_MAX = 6.0
 # Saydamlık (ekran [-]/[+] butonları veya +/- tuşları). 0.10–1.00; yüksek = daha şeffaf.
 TRANSP_MIN = 0.10
 TRANSP_MAX = 1.00
-TRANSP_STEP = 0.10
+TRANSP_STEP = 0.25
 TRANSP_DEFAULT = DEFAULT_TRANSPARENCY  # 0.60
 
 # Dokunmatik buton ızgarası (kameranın altında 2 satır). Her buton = bir komut;
 # aynı komutlar klavyeden de gelir (klavye kontrolleri korunur, butonlar EKSTRA).
 BUTTON_ROWS = [
     [("row_up", "Sıra ▲"), ("row_down", "Sıra ▼"), ("zoom_in", "Yakınlaş"),
-     ("zoom_out", "Uzaklaş"), ("transp_up", "Saydam +"), ("transp_down", "Saydam −")],
+     ("zoom_out", "Uzaklaş"), ("transp_down", "Saydam −"), ("transp_up", "Saydam +")],
     [("direction", "Yön"), ("colorcheck", "Renk"), ("recalibrate", "Kalibre"),
      ("motif", "Motif"), ("quit", "Çıkış")],
 ]
@@ -665,7 +665,7 @@ def _draw_button_bar(composed: np.ndarray, camera_box, color_check_on: bool) -> 
     Etiketler tek PIL geçişinde çizilsin diye burada değil, çağırıcıda basılır.
     """
     cam_w, cam_h = camera_box
-    bh, gap = 50, 8
+    bh, gap, radius = 50, 16, 12
     n_rows = len(BUTTON_ROWS)
     y0 = cam_h - (bh * n_rows + gap * (n_rows + 1))
     rects: dict = {}
@@ -679,8 +679,8 @@ def _draw_button_bar(composed: np.ndarray, camera_box, color_check_on: bool) -> 
             x2, y2 = x1 + bw, y1 + bh
             rects[cmd] = (x1, y1, x2, y2)
             on = cmd == "colorcheck" and color_check_on  # aktif mod → yeşil
-            cv2.rectangle(composed, (x1, y1), (x2, y2), (60, 95, 60) if on else (55, 55, 55), -1)
-            cv2.rectangle(composed, (x1, y1), (x2, y2), (210, 210, 210), 1)
+            _rounded_rect(composed, (x1, y1), (x2, y2), (60, 95, 60) if on else (55, 55, 55), -1, radius)
+            _rounded_rect(composed, (x1, y1), (x2, y2), (210, 210, 210), 1, radius)
             texts.append((label, (x1 + bw // 2, y1 + bh // 2), 22, (255, 255, 255), True, "mm"))
     return rects, texts
 

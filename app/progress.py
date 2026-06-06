@@ -44,7 +44,10 @@ class ProgressTracker:
 
     def __post_init__(self):
         self._score_ema: np.ndarray | None = None  # yumuşatılmış skor; ilk update'te dolar
-        self._active_row: int = 0
+        # Başlangıç sırası dokuma yönüne göre: bottom_up en ALT (rows-1), top_down en
+        # ÜST (0). İlk update bunu yeniden hesaplar; yine de açılıştaki ilk kare doğru
+        # taraftan başlasın (aksi halde bottom_up'ta 0=tepe görünüp top-down gibi durur).
+        self._active_row: int = self.rows - 1 if self.direction == "bottom_up" else 0
         self._manual_delta: int = 0  # kullanıcının +/- ile eklediği kalıcı offset
 
     def warp(self, frame_bgr: np.ndarray, H_cam_to_chart: np.ndarray) -> np.ndarray:
@@ -90,24 +93,39 @@ class ProgressTracker:
             )
 
         peak = float(self._score_ema.max())
+        spread = peak - float(self._score_ema.min())
 
-        if peak < 0.05:
-            # Tüm skorlar çok düşük → boş kilim. bottom_up'ta dokuma en ALT
-            # sıradan (rows-1) başlar ve yukarı çıkar; top_down'da en üstten (0).
+        if peak < 0.05 or spread < 0.05:
+            # Belirgin dokuma CEPHESİ yok. İki durum buraya düşer:
+            #   - peak<0.05: tüm skorlar çok düşük (boş, koyu zemin).
+            #   - spread<0.05: tüm sıralar tek-tip → boş tezgah. Açık renkli boş bir
+            #     tezgahta darkness terimi yüzünden peak tek başına 0.05'i geçtiğinden
+            #     bu kontrol şart; yoksa "her sıra dokunmuş" sanılıp bottom_up'ta aktif
+            #     sıra 0'a (tepeye) kayıp görsel top-down gibi açılıyordu.
+            # Bu durumda dokumanın BAŞLANGIÇ sırasını göster: bottom_up en ALT (rows-1),
+            # top_down en ÜST (0) → motif baştan, doğru yönden başlar.
             auto_row = self.rows - 1 if self.direction == "bottom_up" else 0
         else:
             threshold = peak * self.thresh_ratio
             woven = self._score_ema >= threshold  # boolean dizi: dokunmuş mu
 
             if self.direction == "bottom_up":
-                # Dokunmuş bölge altta; aktif = en üstteki dokunmuşun bir üstü.
+                # Geçerli dokuma cephesi: ÜSTTE dokunmamış blok, ALTTA dokunmuş.
+                # aktif = üstten ilk dokunmuşun bir üstü (o an çalışılan sıra).
                 idxs = np.where(woven)[0]
-                auto_row = int(idxs.min()) - 1 if len(idxs) else self.rows - 1
-                auto_row = max(-1, auto_row)
+                first_woven = int(idxs.min()) if len(idxs) else self.rows
+                auto_row = first_woven - 1
+                if auto_row < 0:
+                    # Tepede dokunmamış sıra YOK → net cephe yok: ya boş/gürültülü
+                    # sahne ya da tam dolu. Tepeye (0) ATLAMAK yerine BAŞLANGICA (dip)
+                    # dön; aksi halde dokumaya başlamadan motif tepeden başlamış gibi
+                    # görünüp "yön üstten alta" izlenimi veriyordu.
+                    auto_row = self.rows - 1
             else:
-                # Dokunmuş bölge üstte; aktif = ilk dokunmamış sıra.
+                # top_down simetrik: ÜSTTE dokunmuş blok, ALTTA dokunmamış.
+                # aktif = üstten ilk dokunmamış sıra; hiç yoksa BAŞLANGICA (üst=0) dön.
                 idxs = np.where(~woven)[0]
-                auto_row = int(idxs.min()) if len(idxs) else self.rows
+                auto_row = int(idxs.min()) if len(idxs) else 0
 
         # Manuel offset'i ekle, [0, rows] aralığına sıkıştır.
         self._active_row = max(0, min(self.rows, auto_row + self._manual_delta))
