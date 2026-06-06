@@ -83,6 +83,36 @@ def _draw_texts(img_bgr: np.ndarray, items: list) -> None:
     img_bgr[:] = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
 
 
+def _rounded_rect(img: np.ndarray, p1, p2, color, thickness: int, radius: int) -> None:
+    """Yuvarlatılmış köşeli dikdörtgen çiz (cv2'de hazır yok).
+
+    thickness < 0 → dolu; > 0 → o kalınlıkta çerçeve. radius köşe yarıçapı; kenarın
+    yarısını aşmaz. Köşeler LINE_AA ile yumuşatılır. Buton dikdörtgenlerinde kullanılır.
+    """
+    x1, y1 = int(p1[0]), int(p1[1])
+    x2, y2 = int(p2[0]), int(p2[1])
+    r = max(0, min(radius, (x2 - x1) // 2, (y2 - y1) // 2))
+    if r == 0:
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+        return
+    if thickness < 0:  # dolu: iki dikdörtgen artı + dört köşe dairesi
+        cv2.rectangle(img, (x1 + r, y1), (x2 - r, y2), color, -1)
+        cv2.rectangle(img, (x1, y1 + r), (x2, y2 - r), color, -1)
+        for cx, cy in ((x1 + r, y1 + r), (x2 - r, y1 + r),
+                       (x1 + r, y2 - r), (x2 - r, y2 - r)):
+            cv2.circle(img, (cx, cy), r, color, -1, cv2.LINE_AA)
+        return
+    # çerçeve: dört kenar çizgisi + dört köşe yayı
+    cv2.line(img, (x1 + r, y1), (x2 - r, y1), color, thickness, cv2.LINE_AA)
+    cv2.line(img, (x1 + r, y2), (x2 - r, y2), color, thickness, cv2.LINE_AA)
+    cv2.line(img, (x1, y1 + r), (x1, y2 - r), color, thickness, cv2.LINE_AA)
+    cv2.line(img, (x2, y1 + r), (x2, y2 - r), color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x1 + r, y1 + r), (r, r), 180, 0, 90, color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x2 - r, y1 + r), (r, r), 270, 0, 90, color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x1 + r, y2 - r), (r, r), 90, 0, 90, color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x2 - r, y2 - r), (r, r), 0, 0, 90, color, thickness, cv2.LINE_AA)
+
+
 def _fmt_time(seconds: float) -> str:
     """Saniyeyi mm:ss biçimine çevir (negatifi 0 say). Podcast konum/süre göstergesi."""
     s = max(0, int(round(seconds)))
@@ -330,8 +360,8 @@ class UIRenderer:
             x1 = m + i * (bw + gap)
             x2, y2 = x1 + bw, by + bh
             rects[cmd] = (x1, by, x2, y2)
-            cv2.rectangle(panel, (x1, by), (x2, y2), (55, 55, 55), -1)
-            cv2.rectangle(panel, (x1, by), (x2, y2), (210, 210, 210), 1)
+            _rounded_rect(panel, (x1, by), (x2, y2), (55, 55, 55), -1, 10)
+            _rounded_rect(panel, (x1, by), (x2, y2), (210, 210, 210), 1, 10)
             texts.append((blabel, (x1 + bw // 2, by + bh // 2), 18, (255, 255, 255), True, "mm"))
         return texts, rects
 
