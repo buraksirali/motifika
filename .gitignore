@@ -27,3 +27,6 @@ env/
 *.log
 logs/
 captures/
+
+# Cihaza özel kalibrasyon (her kurulumda 4 köşeden yeniden üretilir; takip edilmez)
+assets/calibration.json
